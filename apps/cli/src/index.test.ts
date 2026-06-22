@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -1444,6 +1445,77 @@ describe("hosted publish: assertRelayerReceipt + publishViaRelayer", () => {
       await expect(publishViaRelayer("https://relay.example", undefined, pendingFixture())).rejects.toThrow(/Relayer publish failed \(503 relayer not funded\)/);
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("collectFiles honors .gitignore in a git repo", () => {
+  it("excludes a gitignored build dir (target/) from the snapshot, keeps real source", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vibetrace-git-"));
+    const git = (...a: string[]) =>
+      execFileSync("git", a, {
+        cwd: dir,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "t",
+          GIT_AUTHOR_EMAIL: "t@t",
+          GIT_COMMITTER_NAME: "t",
+          GIT_COMMITTER_EMAIL: "t@t"
+        }
+      });
+    try {
+      await mkdir(join(dir, "src"), { recursive: true });
+      await writeFile(join(dir, "src/lib.rs"), "fn main(){}\n");
+      await mkdir(join(dir, "target/release"), { recursive: true });
+      await writeFile(join(dir, "target/release/big.rlib"), "BINARY-ARTIFACT");
+      await writeFile(join(dir, ".gitignore"), "/target\n");
+      git("init", "-q");
+      git("add", "-A");
+      git("commit", "-qm", "init");
+
+      await runCli(["init"], { cwd: dir, stdout: () => {} });
+      await runCli(["snapshot"], { cwd: dir, stdout: () => {} });
+      const ledger = JSON.parse(await readFile(join(dir, ".vibetrace", "ledger.json"), "utf8"));
+      const files: string[] = ledger.snapshots.at(-1).files.map((f: { path: string }) => f.path);
+      expect(files.some((p) => p.includes("target/"))).toBe(false);
+      expect(files).toContain("src/lib.rs");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("KEEPS a tracked, non-gitignored dir named like a build dir (defers to .gitignore, not the static list)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vibetrace-git-"));
+    const git = (...a: string[]) =>
+      execFileSync("git", a, {
+        cwd: dir,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "t",
+          GIT_AUTHOR_EMAIL: "t@t",
+          GIT_COMMITTER_NAME: "t",
+          GIT_COMMITTER_EMAIL: "t@t"
+        }
+      });
+    try {
+      // "vendor" is in the static fallback list, but this repo deliberately commits source under it and
+      // does NOT gitignore it — git mode must keep it.
+      await mkdir(join(dir, "vendor"), { recursive: true });
+      await writeFile(join(dir, "vendor/keepme.ts"), "export const x = 1;\n");
+      await mkdir(join(dir, "build"), { recursive: true });
+      await writeFile(join(dir, "build/tool.ts"), "export const build = true;\n");
+      git("init", "-q");
+      git("add", "-A");
+      git("commit", "-qm", "init");
+
+      await runCli(["init"], { cwd: dir, stdout: () => {} });
+      await runCli(["snapshot"], { cwd: dir, stdout: () => {} });
+      const ledger = JSON.parse(await readFile(join(dir, ".vibetrace", "ledger.json"), "utf8"));
+      const files: string[] = ledger.snapshots.at(-1).files.map((f: { path: string }) => f.path);
+      expect(files).toContain("vendor/keepme.ts");
+      expect(files).toContain("build/tool.ts");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

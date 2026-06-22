@@ -7242,32 +7242,77 @@ function ogMode(env) {
 }
 async function collectFiles(cwd, config) {
   const files = [];
-  const ignorePatterns = unique([
-    ...config.snapshot.ignore,
-    ...config.publish.publicBundlePath ? [config.publish.publicBundlePath] : []
+  const publicBundle = config.publish.publicBundlePath ? [config.publish.publicBundlePath] : [];
+  const walkIgnore = unique([...config.snapshot.ignore, ...publicBundle]);
+  const gitIgnore = unique([
+    ...config.snapshot.ignore.filter((p) => !GITIGNORE_GOVERNED_DEFAULTS.has(p)),
+    ".vibetrace/**",
+    ...publicBundle
   ]);
-  async function walk(dir) {
-    for (const entry of await readdir3(dir, { withFileTypes: true })) {
-      const absolute = join4(dir, entry.name);
-      const relativePath = relative3(cwd, absolute).replaceAll("\\", "/");
-      if (matchesIgnore(relativePath + (entry.isDirectory() ? "/" : ""), ignorePatterns)) {
-        continue;
-      }
-      if (entry.isDirectory()) {
-        await walk(absolute);
-      } else if (entry.isFile()) {
-        const data = await readFile4(absolute);
-        const stats = await stat3(absolute);
-        files.push({
-          path: relative3(cwd, absolute).replaceAll("\\", "/"),
-          hash: canonicalHash(data.toString("base64")),
-          size: stats.size
-        });
-      }
+  const addFile = async (relativePath, ignorePatterns) => {
+    if (matchesIgnore(relativePath, ignorePatterns)) return;
+    const absolute = join4(cwd, relativePath);
+    let stats;
+    try {
+      stats = await stat3(absolute);
+    } catch {
+      return;
     }
+    if (!stats.isFile()) return;
+    const data = await readFile4(absolute);
+    files.push({ path: relativePath, hash: canonicalHash(data.toString("base64")), size: stats.size });
+  };
+  const gitPaths = await listGitProjectFiles(cwd);
+  if (gitPaths) {
+    for (const relativePath of gitPaths) await addFile(relativePath, gitIgnore);
+  } else {
+    const walk = async (dir) => {
+      for (const entry of await readdir3(dir, { withFileTypes: true })) {
+        const absolute = join4(dir, entry.name);
+        const relativePath = relative3(cwd, absolute).replaceAll("\\", "/");
+        if (matchesIgnore(relativePath + (entry.isDirectory() ? "/" : ""), walkIgnore)) continue;
+        if (entry.isDirectory()) await walk(absolute);
+        else if (entry.isFile()) await addFile(relativePath, walkIgnore);
+      }
+    };
+    await walk(cwd);
   }
-  await walk(cwd);
   return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+var GITIGNORE_GOVERNED_DEFAULTS = /* @__PURE__ */ new Set([
+  ".git/**",
+  "node_modules/**",
+  "dist/**",
+  "build/**",
+  "out/**",
+  "target/**",
+  "vendor/**",
+  ".next/**",
+  ".nuxt/**",
+  ".output/**",
+  ".svelte-kit/**",
+  ".turbo/**",
+  ".cache/**",
+  ".parcel-cache/**",
+  ".gradle/**",
+  "coverage/**",
+  "playwright-report/**",
+  "test-results/**",
+  "__pycache__/**",
+  ".venv/**",
+  "venv/**"
+]);
+async function listGitProjectFiles(cwd) {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      { cwd, maxBuffer: 256 * 1024 * 1024 }
+    );
+    return stdout.split("\0").filter(Boolean).map((p) => p.replaceAll("\\", "/"));
+  } catch {
+    return null;
+  }
 }
 async function discoverTraceFiles(cwd, config) {
   const files = [];
@@ -7435,15 +7480,19 @@ function defaultConfig(packageJson, cwd) {
     snapshot: {
       // Dir-name patterns match at ANY depth (see patternMatchesPath), so nested deps/build output in a
       // monorepo are excluded too — keeping the snapshot to real source so coverage isn't diluted.
-      // Only UNAMBIGUOUS dependency / cache / framework-output dirs are excluded at any depth — names a
-      // project would essentially never use for committed source. Ambiguous ones (build, out, vendor,
-      // target) are deliberately omitted to avoid silently dropping real source; a project can still add
-      // them to its own config's ignore.
+      // FALLBACK only: for a git repo the snapshot uses `git ls-files` (honoring .gitignore), so this list
+      // mainly matters for non-git repos. It covers the conventional dependency / build-output / cache dirs
+      // (matched at any depth) — including target/build/out for Rust/Java/etc. A git repo that needs a dir
+      // named like one of these kept as source simply does not gitignore it.
       ignore: [
         ".git/**",
         ".vibetrace/**",
         "node_modules/**",
         "dist/**",
+        "build/**",
+        "out/**",
+        "target/**",
+        "vendor/**",
         ".next/**",
         ".nuxt/**",
         ".output/**",
@@ -7451,11 +7500,13 @@ function defaultConfig(packageJson, cwd) {
         ".turbo/**",
         ".cache/**",
         ".parcel-cache/**",
+        ".gradle/**",
         "coverage/**",
         "playwright-report/**",
         "test-results/**",
         "__pycache__/**",
         ".venv/**",
+        "venv/**",
         ".env*",
         "*.log"
       ]
