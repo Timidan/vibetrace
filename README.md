@@ -36,7 +36,7 @@ ledger. Publishing is explicit and produces a redacted public build story.
 One command, from inside any repo you've built with an AI agent:
 
 ```bash
-npx @vibetrace/cli
+npx vibetrace-cli
 ```
 
 That single run is the whole flow: it **collects** your real local Claude Code
@@ -78,7 +78,7 @@ Add VibeTrace to an existing project:
 
 ```bash
 # from the project you want to trace
-pnpm add -D @vibetrace/cli
+pnpm add -D vibetrace-cli
 pnpm exec vibetrace init --ci
 ```
 
@@ -123,7 +123,7 @@ VIBETRACE_REGISTRY_URL=https://your-vibetrace-viewer.example
 VIBETRACE_VIEWER_URL=https://your-vibetrace-viewer.example
 ```
 
-**You fund nothing.** By default, `npx @vibetrace/cli` delegates every funded 0G write
+**You fund nothing.** By default, `npx vibetrace-cli` delegates every funded 0G write
 — the chain anchor, the 0G Storage upload, and the TEE-attested 0G Compute
 judgment — to a hosted **VibeTrace relayer** that holds the funded 0G key. The
 `vibetrace` client never holds a key and you never pay gas: point it at a relayer
@@ -141,7 +141,7 @@ hash at that block; it does **not** imply you owned the wallet or paid. The clie
 re-verifies every returned receipt (the anchored hash must equal your bundle's
 hash, and the on-chain + 0G Storage read-backs must match) before trusting it.
 
-With **no relayer** configured, `npx @vibetrace/cli` falls back to free, local
+With **no relayer** configured, `npx vibetrace-cli` falls back to free, local
 development anchors under `.vibetrace/` — no key, no network. To **self-host** the
 funded writes instead (anchor with your OWN key rather than via a relayer), set
 `VIBETRACE_OG_MODE=real-chain` (chain only) or `real` (chain + 0G Storage) and

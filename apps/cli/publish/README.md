@@ -1,11 +1,11 @@
-# @vibetrace/cli
+# vibetrace-cli
 
 Local-first **proof-of-build** ledger for AI-assisted software.
 
 ```bash
-npx @vibetrace/cli          # run it in any repo
+npx vibetrace-cli          # run it in any repo
 # or install the `vibetrace` command globally:
-npm i -g @vibetrace/cli && vibetrace
+npm i -g vibetrace-cli && vibetrace
 ```
 
 Run it in any repo. It reads your *local* AI-agent build transcripts

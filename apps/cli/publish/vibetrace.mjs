@@ -6976,7 +6976,7 @@ async function publishLedger(cwd, argv, now, env, stdout) {
     storageProvider: usesRealStorage ? "0g-storage" : void 0,
     verifierProvider: verifiedLedger.verifier.verifierRun.provider,
     verifierModel: verifiedLedger.verifier.verifierRun.model,
-    // F3 gate: only promote the compute/TEE badges when the run carries a structurally valid
+    // Only promote the compute/TEE badges when the run carries a structurally valid
     // (honestly-labeled `attests: "tee-execution"`) attestation — never from the provider string alone.
     attested: hasValidatedAttestationShape(verifiedLedger.verifier.verifierRun)
   });
