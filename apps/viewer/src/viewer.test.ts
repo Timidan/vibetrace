@@ -756,6 +756,10 @@ describe("shared site footer (present on every route)", () => {
     expect(html).toContain('href="#/leaderboard"');
     expect(html).toContain('href="https://github.com/"');
     expect(html).toContain('href="mailto:hello@vibetrace.dev"');
+    // Powered by 0G — the official glitch wordmark, linked to 0g.ai.
+    expect(html).toContain("Powered by");
+    expect(html).toContain('href="https://0g.ai"');
+    expect(html).toContain('class="og0g"');
   }
 
   it("renders the footer on the landing page", () => {

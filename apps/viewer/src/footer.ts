@@ -1,4 +1,4 @@
-import { logoMark } from "./assets";
+import { logoMark, og0gGlitch } from "./assets";
 
 /* ── Shared site FOOTER (rendered on every route) ──
  *
@@ -67,6 +67,14 @@ export function renderFooter(): string {
           <span class="font-mono text-[10px] font-bold uppercase tracking-wide text-ink/45 whitespace-nowrap shrink-0">
             © ${YEAR} VibeTrace
           </span>
+        </div>
+
+        <!-- Powered by 0G — the official 0G wordmark with the RGB-split glitch (same mark as the landing copy) -->
+        <div class="mt-4 pt-3.5 border-t-2 border-ink/10 flex items-center justify-center gap-2.5">
+          <span class="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-ink/50">Powered by</span>
+          <a href="https://0g.ai" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center text-[18px] leading-none transition-transform hover:-translate-y-0.5"
+             aria-label="0G — 0g.ai">${og0gGlitch()}</a>
         </div>
       </div>
     </footer>`;
