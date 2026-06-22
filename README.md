@@ -4,6 +4,10 @@
 
 # VibeTrace
 
+<!-- vibetrace-badge -->
+[![VibeScore S](https://vibetrace.timidan.xyz/api/badge/4cb31b338ccefb26417de03613284504f339e5a5ffea59dff5325951af8a645b.svg)](https://vibetrace.timidan.xyz/#/p/4cb31b338ccefb26417de03613284504f339e5a5ffea59dff5325951af8a645b)
+<!-- /vibetrace-badge -->
+
 **Local-first proof-of-build ledger for AI-assisted software — trace real agent sessions, optionally anchor them on 0G, and publish a verifiable build story.**
 
 <p>
