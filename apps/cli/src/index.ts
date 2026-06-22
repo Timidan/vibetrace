@@ -1957,7 +1957,11 @@ function invokedAsMain(): boolean {
   }
 }
 
-if (invokedAsMain()) {
+// `&& !__VIBETRACE_RELAYER__`: the relayer bundle inlines this module (for anchorStoreAndVerify);
+// once bundled, import.meta.url === argv[1] makes invokedAsMain() true, which would run the CLI ship
+// flow on every relayer start. The relayer bundle sets this global in a banner; the standalone CLI
+// bundle does not, so the CLI still runs normally.
+if (invokedAsMain() && !(globalThis as { __VIBETRACE_RELAYER__?: boolean }).__VIBETRACE_RELAYER__) {
   runCli(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

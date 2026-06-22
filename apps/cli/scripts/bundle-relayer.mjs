@@ -21,4 +21,9 @@ await build({
   external: ["ethers", "@0gfoundation/*"],
   outfile: "../../scripts/relayer.bundle.mjs",
   logLevel: "info",
+  // The CLI entry (apps/cli/src/index.ts) is pulled in for anchorStoreAndVerify, and its
+  // `invokedAsMain()` guard is fooled once bundled (import.meta.url === argv[1] === this bundle),
+  // which would run the CLI ship flow on every relayer start. This flag, set before any bundled
+  // module executes, lets that guard opt out. The standalone CLI bundle has no such banner.
+  banner: { js: "globalThis.__VIBETRACE_RELAYER__ = true;" },
 });
