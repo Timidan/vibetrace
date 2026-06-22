@@ -4,7 +4,16 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalHash, hashPublicLedgerBundle } from "@vibetrace/schema";
 import type { ClaimVerdict, VerifierRun, EvidenceBadge, PublicLedgerBundle } from "@vibetrace/schema";
-import { addBadgeToReadme, assertRelayerReceipt, augmentEvidenceBadgesForPublish, publishViaRelayer, runCli } from "./index";
+import {
+  addBadgeToReadme,
+  assertRelayerReceipt,
+  augmentEvidenceBadgesForPublish,
+  matchesIgnore,
+  migrateLedgerProjectName,
+  publishViaRelayer,
+  resolveProjectName,
+  runCli
+} from "./index";
 import { assemblePrivatePacket } from "./private-packet";
 
 describe("addBadgeToReadme", () => {
@@ -1435,6 +1444,146 @@ describe("hosted publish: assertRelayerReceipt + publishViaRelayer", () => {
       await expect(publishViaRelayer("https://relay.example", undefined, pendingFixture())).rejects.toThrow(/Relayer publish failed \(503 relayer not funded\)/);
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("matchesIgnore — gitignore-style any-depth dir exclusion", () => {
+  const patterns = ["node_modules/**", "dist/**", "build/**", "coverage/**", "*.log"];
+
+  it("excludes a repo-root dependency dir", () => {
+    expect(matchesIgnore("node_modules/lodash/index.js", patterns)).toBe(true);
+  });
+
+  it("excludes a NESTED node_modules (the monorepo leak that drowned coverage)", () => {
+    expect(matchesIgnore("apps/web/node_modules/react/index.js", patterns)).toBe(true);
+    expect(matchesIgnore("packages/x/node_modules/.bin/tsc", patterns)).toBe(true);
+  });
+
+  it("excludes nested build/dist output at any depth", () => {
+    expect(matchesIgnore("packages/x/dist/out.js", patterns)).toBe(true);
+    expect(matchesIgnore("apps/api/build/server.js", patterns)).toBe(true);
+  });
+
+  it("keeps real source and does NOT over-match lookalike names", () => {
+    expect(matchesIgnore("src/index.ts", patterns)).toBe(false);
+    expect(matchesIgnore("src/node_modules_helper.ts", patterns)).toBe(false);
+    expect(matchesIgnore("lib/distance.ts", patterns)).toBe(false);
+    expect(matchesIgnore("buildings/list.ts", patterns)).toBe(false);
+  });
+});
+
+describe("resolveProjectName", () => {
+  it("prefers a package.json name", () => {
+    expect(resolveProjectName({ name: "my-pkg" }, "/home/u/some-folder")).toBe("my-pkg");
+  });
+
+  it("falls back to the folder name when package.json has no usable name", () => {
+    expect(resolveProjectName({}, "/home/u/agent-arena")).toBe("agent-arena");
+    expect(resolveProjectName({ name: "   " }, "/home/u/agent-arena")).toBe("agent-arena");
+  });
+});
+
+describe("runCli init — project name resolution", () => {
+  it("uses the folder name when package.json has none (no more 'unnamed-project')", async () => {
+    const base = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    const dir = join(base, "cool-arena");
+    await mkdir(dir, { recursive: true });
+    try {
+      await runCli(["init"], { cwd: dir, stdout: () => {} });
+      const cfg = JSON.parse(await readFile(join(dir, "vibetrace.config.json"), "utf8"));
+      expect(cfg.project.name).toBe("cool-arena");
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the package.json name when present", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    try {
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name: "from-pkg" }));
+      await runCli(["init"], { cwd: dir, stdout: () => {} });
+      const cfg = JSON.parse(await readFile(join(dir, "vibetrace.config.json"), "utf8"));
+      expect(cfg.project.name).toBe("from-pkg");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the interactive prompt answer over the folder default", async () => {
+    const base = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    const dir = join(base, "folder-default");
+    await mkdir(dir, { recursive: true });
+    try {
+      await runCli(["init"], { cwd: dir, stdout: () => {}, promptText: async () => "Chosen Name" });
+      const cfg = JSON.parse(await readFile(join(dir, "vibetrace.config.json"), "utf8"));
+      expect(cfg.project.name).toBe("Chosen Name");
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates an existing LEDGER's legacy 'unnamed-project' name (what publish actually reads)", async () => {
+    const base = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    const dir = join(base, "real-arena");
+    await mkdir(join(dir, ".vibetrace"), { recursive: true });
+    try {
+      await writeFile(
+        join(dir, ".vibetrace", "ledger.json"),
+        JSON.stringify({
+          schemaVersion: "vibetrace.local.v1",
+          project: { name: "unnamed-project", root: dir },
+          createdAt: new Date(0).toISOString(),
+          snapshots: [],
+          traces: [],
+          claims: []
+        })
+      );
+      await migrateLedgerProjectName(dir, () => {});
+      const ledger = JSON.parse(await readFile(join(dir, ".vibetrace", "ledger.json"), "utf8"));
+      expect(ledger.project.name).toBe("real-arena");
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a deliberately-set ledger name untouched", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    await mkdir(join(dir, ".vibetrace"), { recursive: true });
+    try {
+      await writeFile(
+        join(dir, ".vibetrace", "ledger.json"),
+        JSON.stringify({
+          schemaVersion: "vibetrace.local.v1",
+          project: { name: "deliberate-name", root: dir },
+          createdAt: new Date(0).toISOString(),
+          snapshots: [],
+          traces: [],
+          claims: []
+        })
+      );
+      await migrateLedgerProjectName(dir, () => {});
+      const ledger = JSON.parse(await readFile(join(dir, ".vibetrace", "ledger.json"), "utf8"));
+      expect(ledger.project.name).toBe("deliberate-name");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-heals an existing 'unnamed-project' config to the folder name", async () => {
+    const base = await mkdtemp(join(tmpdir(), "vibetrace-name-"));
+    const dir = join(base, "healed-arena");
+    await mkdir(dir, { recursive: true });
+    try {
+      await writeFile(
+        join(dir, "vibetrace.config.json"),
+        JSON.stringify({ schemaVersion: "vibetrace.config.v1", project: { name: "unnamed-project" } })
+      );
+      await runCli(["init"], { cwd: dir, stdout: () => {} });
+      const ledger = JSON.parse(await readFile(join(dir, ".vibetrace", "ledger.json"), "utf8"));
+      expect(ledger.project.name).toBe("healed-arena");
+    } finally {
+      await rm(base, { recursive: true, force: true });
     }
   });
 });

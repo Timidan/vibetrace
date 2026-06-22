@@ -9,7 +9,7 @@ var __export = (target, all) => {
 import { access, mkdir as mkdir4, readFile as readFile4, readdir as readdir3, realpath, stat as stat3, writeFile as writeFile2 } from "node:fs/promises";
 import { existsSync as existsSync3, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, isAbsolute as isAbsolute2, join as join4, relative as relative3, resolve as resolve3 } from "node:path";
+import { basename, dirname, isAbsolute as isAbsolute2, join as join4, relative as relative3, resolve as resolve3 } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
@@ -6310,7 +6310,10 @@ async function runCli(argv, options = {}) {
   const command = argv[0];
   switch (command) {
     case "init":
-      await initWorkspace(cwd, now, stdout, { ci: argv.includes("--ci") });
+      await initWorkspace(cwd, now, stdout, {
+        ci: argv.includes("--ci"),
+        promptText: options.promptText ?? defaultPromptText
+      });
       return;
     case "ci":
       await runCi(cwd, argv, now, options.env ?? process.env, stdout);
@@ -6319,7 +6322,15 @@ async function runCli(argv, options = {}) {
       await collectTraces(cwd, argv, now, stdout);
       return;
     case "ship":
-      await shipFlow(cwd, argv, now, options.env ?? process.env, stdout, options.promptYesNo ?? defaultPromptYesNo);
+      await shipFlow(
+        cwd,
+        argv,
+        now,
+        options.env ?? process.env,
+        stdout,
+        options.promptYesNo ?? defaultPromptYesNo,
+        options.promptText ?? defaultPromptText
+      );
       return;
     case "snapshot":
       await snapshotWorkspace(cwd, now, stdout);
@@ -6356,7 +6367,15 @@ async function runCli(argv, options = {}) {
       stdout(helpText());
       return;
     case void 0:
-      await shipFlow(cwd, argv, now, options.env ?? process.env, stdout, options.promptYesNo ?? defaultPromptYesNo);
+      await shipFlow(
+        cwd,
+        argv,
+        now,
+        options.env ?? process.env,
+        stdout,
+        options.promptYesNo ?? defaultPromptYesNo,
+        options.promptText ?? defaultPromptText
+      );
       return;
     default:
       throw new Error(`Unknown command: ${command}
@@ -6367,7 +6386,7 @@ ${helpText()}`);
 async function initWorkspace(cwd, now, stdout, options = {}) {
   const dir = ledgerDir(cwd);
   const packageJson = await readPackageJson(cwd);
-  const config = await ensureConfig(cwd, packageJson);
+  const config = await ensureConfig(cwd, packageJson, options.promptText ?? defaultPromptText);
   await ensureGitignore(cwd);
   if (options.ci) {
     const workflowPath = await ensureCiWorkflow(cwd, await detectPackageManager(cwd));
@@ -6471,10 +6490,11 @@ async function collectTraces(cwd, argv, now, stdout) {
   stdout(`Wrote ${relative3(cwd, outPath).replaceAll("\\", "/")}.`);
   return outPath;
 }
-async function shipFlow(cwd, argv, now, env, stdout, promptYesNo = defaultPromptYesNo) {
+async function shipFlow(cwd, argv, now, env, stdout, promptYesNo = defaultPromptYesNo, promptText = defaultPromptText) {
   if (!await exists3(ledgerPath(cwd)) || !await exists3(configPath(cwd))) {
-    await initWorkspace(cwd, now, stdout);
+    await initWorkspace(cwd, now, stdout, { promptText });
   }
+  await migrateLedgerProjectName(cwd, stdout);
   const collectArgs = ["collect", ...argv.slice(1)];
   if (!collectArgs.includes("--yes") && !collectArgs.includes("-y") && !collectArgs.includes("--no-yes")) {
     collectArgs.push("--yes");
@@ -6484,7 +6504,15 @@ async function shipFlow(cwd, argv, now, env, stdout, promptYesNo = defaultPrompt
   if (collectedPath) {
     const relPath = relative3(cwd, collectedPath).replaceAll("\\", "/");
     const result = await importTraceFile(cwd, relPath);
-    stdout(`Imported ${result.added} collected span${result.added === 1 ? "" : "s"}.`);
+    const fileSpans = result.added + result.skipped;
+    if (result.added > 0) {
+      const dupNote = result.skipped ? ` (${result.skipped} already in the ledger)` : "";
+      stdout(`Imported ${result.added} new span${result.added === 1 ? "" : "s"}${dupNote}.`);
+    } else if (fileSpans > 0) {
+      stdout(`${fileSpans} collected span${fileSpans === 1 ? "" : "s"} already in the ledger (0 new to import).`);
+    } else {
+      stdout("No spans in the collected trace; continuing with a snapshot-only ledger.");
+    }
   } else {
     stdout("No collected trace to import; continuing with a snapshot-only ledger.");
   }
@@ -6555,6 +6583,17 @@ var defaultPromptYesNo = async (question) => {
   try {
     const answer = (await rl.question(`${question} `)).trim().toLowerCase();
     return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+};
+var defaultPromptText = async (question, defaultValue) => {
+  if (!process.stdin.isTTY) return defaultValue;
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(`${question}${defaultValue ? ` [${defaultValue}]` : ""} `)).trim();
+    return answer || defaultValue;
   } finally {
     rl.close();
   }
@@ -7287,18 +7326,32 @@ async function writeLedger(cwd, ledger) {
   await writeFile2(ledgerPath(cwd), `${canonicalStringify(ledger)}
 `, "utf8");
 }
+async function migrateLedgerProjectName(cwd, stdout) {
+  if (!await exists3(ledgerPath(cwd))) return;
+  const ledger = await readLedger(cwd);
+  const current = (ledger.project?.name ?? "").trim();
+  if (current && current !== "unnamed-project") return;
+  const resolved = resolveProjectName(await readPackageJson(cwd), cwd);
+  if (resolved === current || resolved === "unnamed-project") return;
+  ledger.project.name = resolved;
+  await writeLedger(cwd, ledger);
+  stdout(`Updated project name to "${resolved}" (was "${current || "(empty)"}").`);
+}
 async function readConfig(cwd) {
   const packageJson = await readPackageJson(cwd);
   if (!await exists3(configPath(cwd))) {
-    return defaultConfig(packageJson);
+    return defaultConfig(packageJson, cwd);
   }
   const input = JSON.parse(await readFile4(configPath(cwd), "utf8"));
-  const defaults = defaultConfig(packageJson);
+  const defaults = defaultConfig(packageJson, cwd);
+  const storedName = typeof input.project?.name === "string" ? input.project.name.trim() : "";
+  const name = storedName && storedName !== "unnamed-project" ? storedName : defaults.project.name;
   return {
     schemaVersion: "vibetrace.config.v1",
     project: {
       ...defaults.project,
-      ...input.project ?? {}
+      ...input.project ?? {},
+      name
     },
     privacy: {
       redaction: "private-by-default"
@@ -7315,11 +7368,16 @@ async function readConfig(cwd) {
     }
   };
 }
-async function ensureConfig(cwd, packageJson) {
+async function ensureConfig(cwd, packageJson, promptText = defaultPromptText) {
   if (await exists3(configPath(cwd))) {
     return readConfig(cwd);
   }
-  const config = defaultConfig(packageJson);
+  const config = defaultConfig(packageJson, cwd);
+  const hasPkgName = typeof packageJson.name === "string" && packageJson.name.trim() !== "";
+  if (!hasPkgName) {
+    const chosen = (await promptText("Project name?", config.project.name)).trim();
+    if (chosen) config.project.name = chosen;
+  }
   await writeFile2(configPath(cwd), `${JSON.stringify(config, null, 2)}
 `, "utf8");
   return config;
@@ -7358,25 +7416,46 @@ async function readPackageJson(cwd) {
     return {};
   }
 }
-function defaultConfig(packageJson) {
+function resolveProjectName(packageJson, cwd) {
+  const fromPkg = typeof packageJson.name === "string" ? packageJson.name.trim() : "";
+  if (fromPkg) return fromPkg;
+  const folder = basename(resolve3(cwd)).trim();
+  if (folder && folder !== "." && folder !== "/" && folder !== "~") return folder;
+  return "unnamed-project";
+}
+function defaultConfig(packageJson, cwd) {
   return {
     schemaVersion: "vibetrace.config.v1",
     project: {
-      name: String(packageJson.name ?? "unnamed-project")
+      name: resolveProjectName(packageJson, cwd)
     },
     privacy: {
       redaction: "private-by-default"
     },
     snapshot: {
+      // Dir-name patterns match at ANY depth (see patternMatchesPath), so nested deps/build output in a
+      // monorepo are excluded too — keeping the snapshot to real source so coverage isn't diluted.
+      // Only UNAMBIGUOUS dependency / cache / framework-output dirs are excluded at any depth — names a
+      // project would essentially never use for committed source. Ambiguous ones (build, out, vendor,
+      // target) are deliberately omitted to avoid silently dropping real source; a project can still add
+      // them to its own config's ignore.
       ignore: [
         ".git/**",
         ".vibetrace/**",
         "node_modules/**",
         "dist/**",
         ".next/**",
+        ".nuxt/**",
+        ".output/**",
+        ".svelte-kit/**",
+        ".turbo/**",
+        ".cache/**",
+        ".parcel-cache/**",
         "coverage/**",
         "playwright-report/**",
         "test-results/**",
+        "__pycache__/**",
+        ".venv/**",
         ".env*",
         "*.log"
       ]
@@ -7584,12 +7663,16 @@ function matchesIgnore(path, patterns) {
 function patternMatchesPath(pattern, path) {
   const normalizedPattern = pattern.replaceAll("\\", "/").replace(/^\.\//, "");
   const pathWithoutTrailingSlash = path.endsWith("/") ? path.slice(0, -1) : path;
+  const dirSegmentAtAnyDepth = (name) => Boolean(name) && !name.includes("/") && `/${pathWithoutTrailingSlash}/`.includes(`/${name}/`);
   if (normalizedPattern.endsWith("/**")) {
     const prefix = normalizedPattern.slice(0, -3);
-    return pathWithoutTrailingSlash === prefix || path.startsWith(`${prefix}/`);
+    if (pathWithoutTrailingSlash === prefix || path.startsWith(`${prefix}/`)) return true;
+    return dirSegmentAtAnyDepth(prefix);
   }
   if (normalizedPattern.endsWith("/")) {
-    return path.startsWith(normalizedPattern);
+    const name = normalizedPattern.slice(0, -1);
+    if (path.startsWith(normalizedPattern)) return true;
+    return dirSegmentAtAnyDepth(name);
   }
   if (!normalizedPattern.includes("/") && path.startsWith(`${normalizedPattern}/`)) {
     return true;
@@ -7691,7 +7774,10 @@ export {
   augmentEvidenceBadgesForPublish,
   buildViewerUrl,
   hasValidatedAttestationShape,
+  matchesIgnore,
+  migrateLedgerProjectName,
   publishViaRelayer,
+  resolveProjectName,
   reverifyPublishedBundle,
   runCli,
   verifyBundleAgainst0G

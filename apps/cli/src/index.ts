@@ -2,7 +2,7 @@
 import { access, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
@@ -76,6 +76,10 @@ export type VerifierFn = typeof runVibeTraceVerifier;
  *  contexts (CI / piped) so `npx vibetrace` never blocks. */
 export type PromptYesNo = (question: string) => Promise<boolean>;
 
+/** Free-text prompt: returns the typed line, or `defaultValue` in non-interactive contexts (CI / piped)
+ *  so `npx vibetrace` never blocks waiting on input. */
+export type PromptText = (question: string, defaultValue: string) => Promise<string>;
+
 export type CliOptions = {
   cwd?: string;
   now?: () => string;
@@ -86,6 +90,8 @@ export type CliOptions = {
   verifierFn?: VerifierFn;
   /** Override for testing the end-of-run "add badge to README?" prompt. */
   promptYesNo?: PromptYesNo;
+  /** Override for testing the "project name?" prompt at first init/ship. */
+  promptText?: PromptText;
 };
 
 type LocalLedger = {
@@ -162,7 +168,10 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
 
   switch (command) {
     case "init":
-      await initWorkspace(cwd, now, stdout, { ci: argv.includes("--ci") });
+      await initWorkspace(cwd, now, stdout, {
+        ci: argv.includes("--ci"),
+        promptText: options.promptText ?? defaultPromptText
+      });
       return;
     case "ci":
       await runCi(cwd, argv, now, options.env ?? process.env, stdout);
@@ -171,7 +180,15 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
       await collectTraces(cwd, argv, now, stdout);
       return;
     case "ship":
-      await shipFlow(cwd, argv, now, options.env ?? process.env, stdout, options.promptYesNo ?? defaultPromptYesNo);
+      await shipFlow(
+        cwd,
+        argv,
+        now,
+        options.env ?? process.env,
+        stdout,
+        options.promptYesNo ?? defaultPromptYesNo,
+        options.promptText ?? defaultPromptText
+      );
       return;
     case "snapshot":
       await snapshotWorkspace(cwd, now, stdout);
@@ -211,7 +228,15 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
       return;
     case undefined:
       // Bare `npx vibetrace` runs the one-shot ship flow.
-      await shipFlow(cwd, argv, now, options.env ?? process.env, stdout, options.promptYesNo ?? defaultPromptYesNo);
+      await shipFlow(
+        cwd,
+        argv,
+        now,
+        options.env ?? process.env,
+        stdout,
+        options.promptYesNo ?? defaultPromptYesNo,
+        options.promptText ?? defaultPromptText
+      );
       return;
     default:
       throw new Error(`Unknown command: ${command}\n\n${helpText()}`);
@@ -222,11 +247,11 @@ async function initWorkspace(
   cwd: string,
   now: () => string,
   stdout: (message: string) => void,
-  options: { ci?: boolean } = {}
+  options: { ci?: boolean; promptText?: PromptText } = {}
 ): Promise<void> {
   const dir = ledgerDir(cwd);
   const packageJson = await readPackageJson(cwd);
-  const config = await ensureConfig(cwd, packageJson);
+  const config = await ensureConfig(cwd, packageJson, options.promptText ?? defaultPromptText);
   await ensureGitignore(cwd);
   if (options.ci) {
     const workflowPath = await ensureCiWorkflow(cwd, await detectPackageManager(cwd));
@@ -378,12 +403,17 @@ async function shipFlow(
   now: () => string,
   env: NodeJS.ProcessEnv,
   stdout: (message: string) => void,
-  promptYesNo: PromptYesNo = defaultPromptYesNo
+  promptYesNo: PromptYesNo = defaultPromptYesNo,
+  promptText: PromptText = defaultPromptText
 ): Promise<void> {
   // Ensure workspace exists.
   if (!(await exists(ledgerPath(cwd))) || !(await exists(configPath(cwd)))) {
-    await initWorkspace(cwd, now, stdout);
+    await initWorkspace(cwd, now, stdout, { promptText });
   }
+  // Heal a ledger written by an older CLI whose project.name is the legacy "unnamed-project" placeholder
+  // (or empty). Publish reads the LEDGER's name, and ship skips re-init when the ledger already exists,
+  // so without this an existing workspace would keep publishing "unnamed-project".
+  await migrateLedgerProjectName(cwd, stdout);
 
   // 1. collect (default to --yes for the one-shot flow unless caller opted out).
   const collectArgs = ["collect", ...argv.slice(1)];
@@ -399,7 +429,16 @@ async function shipFlow(
   if (collectedPath) {
     const relPath = relative(cwd, collectedPath).replaceAll("\\", "/");
     const result = await importTraceFile(cwd, relPath);
-    stdout(`Imported ${result.added} collected span${result.added === 1 ? "" : "s"}.`);
+    const fileSpans = result.added + result.skipped;
+    if (result.added > 0) {
+      const dupNote = result.skipped ? ` (${result.skipped} already in the ledger)` : "";
+      stdout(`Imported ${result.added} new span${result.added === 1 ? "" : "s"}${dupNote}.`);
+    } else if (fileSpans > 0) {
+      // 0 NEW does NOT mean no evidence — these spans were imported on a previous run and are scored.
+      stdout(`${fileSpans} collected span${fileSpans === 1 ? "" : "s"} already in the ledger (0 new to import).`);
+    } else {
+      stdout("No spans in the collected trace; continuing with a snapshot-only ledger.");
+    }
   } else {
     stdout("No collected trace to import; continuing with a snapshot-only ledger.");
   }
@@ -490,6 +529,20 @@ const defaultPromptYesNo: PromptYesNo = async (question) => {
   try {
     const answer = (await rl.question(`${question} `)).trim().toLowerCase();
     return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+};
+
+/** Free-text prompt with a default shown in [brackets]. In non-interactive contexts (CI, piped) it
+ *  returns the default immediately so the one-shot never blocks. Empty input keeps the default. */
+const defaultPromptText: PromptText = async (question, defaultValue) => {
+  if (!process.stdin.isTTY) return defaultValue;
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(`${question}${defaultValue ? ` [${defaultValue}]` : ""} `)).trim();
+    return answer || defaultValue;
   } finally {
     rl.close();
   }
@@ -1522,19 +1575,39 @@ async function writeLedger(cwd: string, ledger: LocalLedger): Promise<void> {
   await writeFile(ledgerPath(cwd), `${canonicalStringify(ledger)}\n`, "utf8");
 }
 
+/** Re-derive a stale ledger project name (empty or the legacy "unnamed-project") from package.json /
+ *  the folder, and persist it. The published bundle reads the LEDGER's name, so this is what actually
+ *  fixes an already-initialized workspace. No-op when the name is already meaningful. */
+export async function migrateLedgerProjectName(cwd: string, stdout: (message: string) => void): Promise<void> {
+  if (!(await exists(ledgerPath(cwd)))) return;
+  const ledger = await readLedger(cwd);
+  const current = (ledger.project?.name ?? "").trim();
+  if (current && current !== "unnamed-project") return;
+  const resolved = resolveProjectName(await readPackageJson(cwd), cwd);
+  if (resolved === current || resolved === "unnamed-project") return;
+  ledger.project.name = resolved;
+  await writeLedger(cwd, ledger);
+  stdout(`Updated project name to "${resolved}" (was "${current || "(empty)"}").`);
+}
+
 async function readConfig(cwd: string): Promise<VibeTraceConfig> {
   const packageJson = await readPackageJson(cwd);
   if (!(await exists(configPath(cwd)))) {
-    return defaultConfig(packageJson);
+    return defaultConfig(packageJson, cwd);
   }
 
   const input = JSON.parse(await readFile(configPath(cwd), "utf8")) as Partial<VibeTraceConfig>;
-  const defaults = defaultConfig(packageJson);
+  const defaults = defaultConfig(packageJson, cwd);
+  // Auto-heal a config that still carries the old "unnamed-project" placeholder (or an empty name):
+  // re-derive from package.json / the folder so existing projects stop showing "unnamed-project".
+  const storedName = typeof input.project?.name === "string" ? input.project.name.trim() : "";
+  const name = storedName && storedName !== "unnamed-project" ? storedName : defaults.project.name;
   return {
     schemaVersion: "vibetrace.config.v1",
     project: {
       ...defaults.project,
-      ...(input.project ?? {})
+      ...(input.project ?? {}),
+      name
     },
     privacy: {
       redaction: "private-by-default"
@@ -1552,12 +1625,23 @@ async function readConfig(cwd: string): Promise<VibeTraceConfig> {
   };
 }
 
-async function ensureConfig(cwd: string, packageJson: Record<string, unknown>): Promise<VibeTraceConfig> {
+async function ensureConfig(
+  cwd: string,
+  packageJson: Record<string, unknown>,
+  promptText: PromptText = defaultPromptText
+): Promise<VibeTraceConfig> {
   if (await exists(configPath(cwd))) {
     return readConfig(cwd);
   }
 
-  const config = defaultConfig(packageJson);
+  const config = defaultConfig(packageJson, cwd);
+  // No package.json `name` to go on — the default is the folder name. Let an interactive user confirm
+  // or override it before we bake it into the config (non-interactive keeps the folder-name default).
+  const hasPkgName = typeof packageJson.name === "string" && packageJson.name.trim() !== "";
+  if (!hasPkgName) {
+    const chosen = (await promptText("Project name?", config.project.name)).trim();
+    if (chosen) config.project.name = chosen;
+  }
   await writeFile(configPath(cwd), `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return config;
 }
@@ -1601,25 +1685,49 @@ async function readPackageJson(cwd: string): Promise<Record<string, unknown>> {
   }
 }
 
-function defaultConfig(packageJson: Record<string, unknown>): VibeTraceConfig {
+/** Resolve a human project name: package.json `name`, else the repo folder name, else a last-resort
+ *  placeholder. The folder name is almost always meaningful, so "unnamed-project" is now genuinely rare. */
+export function resolveProjectName(packageJson: Record<string, unknown>, cwd: string): string {
+  const fromPkg = typeof packageJson.name === "string" ? packageJson.name.trim() : "";
+  if (fromPkg) return fromPkg;
+  const folder = basename(resolve(cwd)).trim();
+  if (folder && folder !== "." && folder !== "/" && folder !== "~") return folder;
+  return "unnamed-project";
+}
+
+function defaultConfig(packageJson: Record<string, unknown>, cwd: string): VibeTraceConfig {
   return {
     schemaVersion: "vibetrace.config.v1",
     project: {
-      name: String(packageJson.name ?? "unnamed-project")
+      name: resolveProjectName(packageJson, cwd)
     },
     privacy: {
       redaction: "private-by-default"
     },
     snapshot: {
+      // Dir-name patterns match at ANY depth (see patternMatchesPath), so nested deps/build output in a
+      // monorepo are excluded too — keeping the snapshot to real source so coverage isn't diluted.
+      // Only UNAMBIGUOUS dependency / cache / framework-output dirs are excluded at any depth — names a
+      // project would essentially never use for committed source. Ambiguous ones (build, out, vendor,
+      // target) are deliberately omitted to avoid silently dropping real source; a project can still add
+      // them to its own config's ignore.
       ignore: [
         ".git/**",
         ".vibetrace/**",
         "node_modules/**",
         "dist/**",
         ".next/**",
+        ".nuxt/**",
+        ".output/**",
+        ".svelte-kit/**",
+        ".turbo/**",
+        ".cache/**",
+        ".parcel-cache/**",
         "coverage/**",
         "playwright-report/**",
         "test-results/**",
+        "__pycache__/**",
+        ".venv/**",
         ".env*",
         "*.log"
       ]
@@ -1839,7 +1947,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function matchesIgnore(path: string, patterns: string[]): boolean {
+export function matchesIgnore(path: string, patterns: string[]): boolean {
   const normalized = path.replaceAll("\\", "/").replace(/^\.\//, "");
   return patterns.some((pattern) => patternMatchesPath(pattern, normalized));
 }
@@ -1848,13 +1956,23 @@ function patternMatchesPath(pattern: string, path: string): boolean {
   const normalizedPattern = pattern.replaceAll("\\", "/").replace(/^\.\//, "");
   const pathWithoutTrailingSlash = path.endsWith("/") ? path.slice(0, -1) : path;
 
+  // A single-segment directory name (e.g. "node_modules") matches at ANY depth — gitignore semantics —
+  // so `node_modules/**` excludes nested deps (apps/web/node_modules, packages/*/node_modules), not just
+  // a repo-root node_modules. Without this a monorepo snapshots tens of thousands of dependency files,
+  // which drowns the real source in the coverage denominator.
+  const dirSegmentAtAnyDepth = (name: string): boolean =>
+    Boolean(name) && !name.includes("/") && `/${pathWithoutTrailingSlash}/`.includes(`/${name}/`);
+
   if (normalizedPattern.endsWith("/**")) {
     const prefix = normalizedPattern.slice(0, -3);
-    return pathWithoutTrailingSlash === prefix || path.startsWith(`${prefix}/`);
+    if (pathWithoutTrailingSlash === prefix || path.startsWith(`${prefix}/`)) return true;
+    return dirSegmentAtAnyDepth(prefix);
   }
 
   if (normalizedPattern.endsWith("/")) {
-    return path.startsWith(normalizedPattern);
+    const name = normalizedPattern.slice(0, -1);
+    if (path.startsWith(normalizedPattern)) return true;
+    return dirSegmentAtAnyDepth(name);
   }
 
   if (!normalizedPattern.includes("/") && path.startsWith(`${normalizedPattern}/`)) {
