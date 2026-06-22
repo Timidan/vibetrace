@@ -111,15 +111,48 @@ export type CoreResult = {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STORE_PATH = resolve(HERE, ".vibetrace-registry.json");
 const DEFAULT_SEED_DIR = resolve(HERE, "../../.vibetrace/public");
-export const MAX_SUBMIT_BODY_BYTES = 5 * 1024 * 1024;
-const MAX_BUNDLE_ARRAY_ITEMS = 10_000;
+// A real project's public bundle (full artifact graph + snapshot) can be tens of MB with hundreds
+// of thousands of nodes/edges, so the original 5MB / 10k caps rejected legitimate large submissions.
+// Env-derived limits keep floors so production config can only RAISE the original caps; test overrides
+// (via createStore) intentionally bypass the floors so tests can use tiny caps without huge allocations.
+const MIN_SUBMIT_BODY_MB = 5;
+const DEFAULT_SUBMIT_BODY_MB = 64;
+const MIN_BUNDLE_ARRAY_ITEMS = 10_000;
+const DEFAULT_BUNDLE_ARRAY_ITEMS = 400_000;
+
+export type RegistryLimits = {
+  maxSubmitBytes: number;
+  maxBundleArrayItems: number;
+};
+
+function envNumber(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function registryLimitsFromEnv(): RegistryLimits {
+  const submitMb = envNumber("VIBETRACE_REGISTRY_MAX_SUBMIT_MB", DEFAULT_SUBMIT_BODY_MB);
+  const arrayItems = envNumber("VIBETRACE_REGISTRY_MAX_ARRAY_ITEMS", DEFAULT_BUNDLE_ARRAY_ITEMS);
+  return {
+    maxSubmitBytes: Math.max(MIN_SUBMIT_BODY_MB, submitMb) * 1024 * 1024,
+    maxBundleArrayItems: Math.max(MIN_BUNDLE_ARRAY_ITEMS, arrayItems)
+  };
+}
+
+function resolveRegistryLimits(overrides: Partial<RegistryLimits> = {}): RegistryLimits {
+  const env = registryLimitsFromEnv();
+  return {
+    maxSubmitBytes: overrides.maxSubmitBytes ?? env.maxSubmitBytes,
+    maxBundleArrayItems: overrides.maxBundleArrayItems ?? env.maxBundleArrayItems
+  };
+}
 /** Cap total stored entries so unauthenticated submissions can't grow the store
  *  (and the on-disk JSON it rewrites every submit) without bound. */
 const MAX_REGISTRY_ENTRIES = 1000;
 const HEX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
 
 export class RequestBodyTooLargeError extends Error {
-  constructor(readonly maxBytes = MAX_SUBMIT_BODY_BYTES) {
+  constructor(readonly maxBytes = registryLimitsFromEnv().maxSubmitBytes) {
     super(`Request body too large (max ${Math.floor(maxBytes / (1024 * 1024))}MB)`);
     this.name = "RequestBodyTooLargeError";
   }
@@ -131,7 +164,7 @@ export function isRequestBodyTooLargeError(err: unknown): err is RequestBodyTooL
 
 export async function readLimitedRequestBody(
   stream: AsyncIterable<unknown>,
-  maxBytes = MAX_SUBMIT_BODY_BYTES
+  maxBytes = registryLimitsFromEnv().maxSubmitBytes
 ): Promise<string> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -159,6 +192,7 @@ export type RegistryStore = {
   entries: StoredEntry[];
   storePath: string;
   seedDir: string;
+  limits: RegistryLimits;
 };
 
 export type CreateStoreOptions = {
@@ -166,6 +200,8 @@ export type CreateStoreOptions = {
   storePath?: string;
   /** Override the seed directory (defaults to <repo>/.vibetrace/public). */
   seedDir?: string;
+  /** Override submission caps, primarily for focused tests. */
+  limits?: Partial<RegistryLimits>;
 };
 
 /* ── persistence (created lazily; tolerant of a missing/empty file) ── */
@@ -305,15 +341,16 @@ function collectHashValidationErrors(bundle: PublicLedgerBundle): string[] {
   return errors;
 }
 
-function validatePostedBundle(bundle: PublicLedgerBundle): string | null {
-  if (bundle.publicGraph.nodes.length > MAX_BUNDLE_ARRAY_ITEMS) {
-    return `Too many publicGraph.nodes entries (max ${MAX_BUNDLE_ARRAY_ITEMS})`;
+function validatePostedBundle(store: RegistryStore, bundle: PublicLedgerBundle): string | null {
+  const { maxBundleArrayItems } = store.limits;
+  if (bundle.publicGraph.nodes.length > maxBundleArrayItems) {
+    return `Too many publicGraph.nodes entries (max ${maxBundleArrayItems})`;
   }
-  if (bundle.publicGraph.edges.length > MAX_BUNDLE_ARRAY_ITEMS) {
-    return `Too many publicGraph.edges entries (max ${MAX_BUNDLE_ARRAY_ITEMS})`;
+  if (bundle.publicGraph.edges.length > maxBundleArrayItems) {
+    return `Too many publicGraph.edges entries (max ${maxBundleArrayItems})`;
   }
-  if (bundle.evidenceBadges.length > MAX_BUNDLE_ARRAY_ITEMS) {
-    return `Too many evidenceBadges entries (max ${MAX_BUNDLE_ARRAY_ITEMS})`;
+  if (bundle.evidenceBadges.length > maxBundleArrayItems) {
+    return `Too many evidenceBadges entries (max ${maxBundleArrayItems})`;
   }
 
   const hashErrors = collectHashValidationErrors(bundle);
@@ -615,7 +652,8 @@ export async function createStore(opts: CreateStoreOptions = {}): Promise<Regist
   const store: RegistryStore = {
     entries: [],
     storePath: opts.storePath ?? DEFAULT_STORE_PATH,
-    seedDir: opts.seedDir ?? DEFAULT_SEED_DIR
+    seedDir: opts.seedDir ?? DEFAULT_SEED_DIR,
+    limits: resolveRegistryLimits(opts.limits)
   };
   store.entries = loadEntries(store.storePath);
   await seedIfEmpty(store);
@@ -881,8 +919,11 @@ export async function handleBadge(
  * FileVersion hash overlap), and persisted.
  */
 export async function handleSubmit(store: RegistryStore, jsonBody: string): Promise<CoreResult> {
-  if (Buffer.byteLength(jsonBody, "utf8") > MAX_SUBMIT_BODY_BYTES) {
-    return jsonResult(413, { error: `Request body too large (max 5MB)` });
+  const { maxSubmitBytes } = store.limits;
+  if (Buffer.byteLength(jsonBody, "utf8") > maxSubmitBytes) {
+    return jsonResult(413, {
+      error: `Request body too large (max ${Math.floor(maxSubmitBytes / (1024 * 1024))}MB)`
+    });
   }
 
   // 1. Parse the request body.
@@ -905,7 +946,7 @@ export async function handleSubmit(store: RegistryStore, jsonBody: string): Prom
     return jsonResult(400, { error: "Not a valid PublicLedgerBundle" });
   }
   const bundle = parsed as PublicLedgerBundle;
-  const validationError = validatePostedBundle(bundle);
+  const validationError = validatePostedBundle(store, bundle);
   if (validationError) {
     return jsonResult(400, { error: validationError });
   }

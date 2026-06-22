@@ -46,6 +46,7 @@ import {
   handleSubmit,
   readLimitedRequestBody,
   writeJsonFileAtomic,
+  type RegistryLimits,
   type RegistryStore
 } from "../registry-core";
 import { Wallet, hashMessage } from "ethers";
@@ -1437,9 +1438,16 @@ describe("renderEmbedBadge via renderBundle — external bundle (no id)", () => 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-async function freshTempStore(): Promise<{ store: RegistryStore; dir: string }> {
+const TEST_SUBMIT_BODY_BYTES = 64 * 1024;
+const TEST_BUNDLE_ARRAY_ITEMS = 20;
+
+async function freshTempStore(limits?: Partial<RegistryLimits>): Promise<{ store: RegistryStore; dir: string }> {
   const dir = mkdtempSync(join(tmpdir(), "vibetrace-core-"));
-  const store = await createStore({ storePath: join(dir, "store.json"), seedDir: SEED_DIR });
+  const store = await createStore({
+    storePath: join(dir, "store.json"),
+    seedDir: SEED_DIR,
+    ...(limits ? { limits } : {})
+  });
   return { store, dir };
 }
 
@@ -1573,12 +1581,12 @@ describe("registry-core handlers", () => {
     }
   });
 
-  it("handleSubmit rejects request bodies over 5MB before parsing", async () => {
-    const { store, dir } = await freshTempStore();
+  it("handleSubmit rejects request bodies over the cap before parsing", async () => {
+    const { store, dir } = await freshTempStore({ maxSubmitBytes: TEST_SUBMIT_BODY_BYTES });
     try {
       const before = store.entries.length;
-      const tooLarge = JSON.stringify({ bundle: null, padding: "x".repeat(5 * 1024 * 1024) });
-      expect(Buffer.byteLength(tooLarge, "utf8")).toBeGreaterThan(5 * 1024 * 1024);
+      const tooLarge = JSON.stringify({ bundle: null, padding: "x".repeat(store.limits.maxSubmitBytes) });
+      expect(Buffer.byteLength(tooLarge, "utf8")).toBeGreaterThan(store.limits.maxSubmitBytes);
 
       const res = await handleSubmit(store, tooLarge);
       expect(res.status).toBe(413);
@@ -1589,13 +1597,12 @@ describe("registry-core handlers", () => {
     }
   });
 
-  it("readLimitedRequestBody enforces the same 5MB limit for both HTTP adapters", async () => {
+  it("readLimitedRequestBody enforces its byte cap (an over-cap stream is rejected)", async () => {
     async function* chunks(): AsyncGenerator<Buffer> {
-      yield Buffer.alloc(5 * 1024 * 1024);
+      yield Buffer.alloc(64 * 1024);
       yield Buffer.from("x");
     }
-
-    await expect(readLimitedRequestBody(chunks())).rejects.toThrow(/too large/i);
+    await expect(readLimitedRequestBody(chunks(), 64 * 1024)).rejects.toThrow(/too large/i);
   });
 
   it("handleSubmit accepts a directly POSTed { bundle } — scores, stores, and returns the entry (the npx vibetrace path)", async () => {
@@ -1668,7 +1675,7 @@ describe("registry-core handlers", () => {
       ...bundle,
       publicGraph: {
         ...bundle.publicGraph,
-        nodes: Array.from({ length: 10_001 }, (_, i) => ({
+        nodes: Array.from({ length: TEST_BUNDLE_ARRAY_ITEMS + 1 }, (_, i) => ({
           id: `file:${i}`,
           type: "FileVersion" as const,
           label: `file-${i}.ts`,
@@ -1680,7 +1687,7 @@ describe("registry-core handlers", () => {
       ...bundle,
       publicGraph: {
         ...bundle.publicGraph,
-        edges: Array.from({ length: 10_001 }, (_, i) => ({
+        edges: Array.from({ length: TEST_BUNDLE_ARRAY_ITEMS + 1 }, (_, i) => ({
           id: `edge:${i}`,
           from: "file:src/index.ts@abc123",
           to: "claim:ai-build",
@@ -1690,7 +1697,7 @@ describe("registry-core handlers", () => {
     }) as PublicLedgerBundle],
     ["evidenceBadges", (bundle: PublicLedgerBundle) => ({
       ...bundle,
-      evidenceBadges: Array.from({ length: 10_001 }, (_, i) => ({
+      evidenceBadges: Array.from({ length: TEST_BUNDLE_ARRAY_ITEMS + 1 }, (_, i) => ({
         claimId: `claim:${i}`,
         status: "verified" as const,
         confidence: 0.9,
@@ -1698,8 +1705,8 @@ describe("registry-core handlers", () => {
         publicExplanation: "Artifact supports this claim."
       }))
     }) as PublicLedgerBundle]
-  ])("handleSubmit rejects bundles with more than 10000 %s", async (_name, mutate) => {
-    const { store, dir } = await freshTempStore();
+  ])("handleSubmit rejects bundles with more than the configured %s cap", async (_name, mutate) => {
+    const { store, dir } = await freshTempStore({ maxBundleArrayItems: TEST_BUNDLE_ARRAY_ITEMS });
     try {
       const before = store.entries.length;
       const res = await handleSubmit(store, JSON.stringify({ bundle: mutate(anchoredBundle()) }));

@@ -132,7 +132,10 @@ type VibeTraceConfig = {
   };
 };
 
-const defaultRegistryUrl = "http://localhost:5173";
+// Default registry = the hosted VibeTrace board, so `vibetrace` registers to the live leaderboard
+// zero-config. For local monorepo dev (pnpm dev:viewer on :5173), override with
+// VIBETRACE_REGISTRY_URL=http://localhost:5173 or --registry-url.
+const defaultRegistryUrl = "https://vibetrace.timidan.xyz";
 
 type PackageManager = "pnpm" | "npm" | "yarn" | "bun";
 
