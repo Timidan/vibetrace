@@ -273,12 +273,14 @@ export function sealState(bundle: PublicLedgerBundle, verification: BundleVerifi
       };
     }
 
-    const worst = worstVerdict(verifier.verdicts) ?? "unsupported";
-    const { word, cls } = verdictWordAndClass(worst);
+    // The seal HEADLINES the attestation state — this build WAS examined by a 0G TEE enclave —
+    // never the worst per-claim verdict. Headlining "unsupported" read as a build failure even
+    // though the attestation + the live 0G anchor are green; the per-claim verdicts are shown
+    // separately (the stat-row substantiated/flagged breakdown + the examiner claim cards).
     return {
       kind: "attested",
-      verdictWord: word,
-      verdictClass: cls,
+      verdictWord: "0G TEE EXAMINED",
+      verdictClass: "bg-wax text-paperlight",
       sigShort: shortenHash(String(attestation.signature ?? "")),
       signingAddress: String(attestation.signingAddress ?? ""),
       modelId
@@ -611,13 +613,12 @@ function renderSealFace(seal: SealState): string {
     : "";
   const rim = cracked
     ? "SEAL UNVERIFIED · DO NOT TRUST ·"
-    : `${rimSignature(seal.sigShort)} · ${escapeHtml(seal.modelId)} · 0G TEE EXAMINED ·`;
+    : `${rimSignature(seal.sigShort)} · ${escapeHtml(seal.modelId)} ·`;
 
-  // On the ATTESTED face the big word is the per-claim VERDICT (the seal is the
-  // examiner's verdict, not a pass/fail attestation) — prefix "VERDICT: " so an
-  // UNSUPPORTED/INFLATED reads as the verdict, not a failed seal. The CRACKED face
-  // shows "SEAL UNVERIFIED" (not a verdict) and stays unprefixed.
-  const faceWord = cracked ? seal.verdictWord : `VERDICT: ${seal.verdictWord}`;
+  // The face word IS the seal headline from sealState — "0G TEE EXAMINED" (attested),
+  // "SEAL UNVERIFIED" (cracked), or "LOCAL CHECK ONLY" (structural). It is the attestation
+  // state, NEVER a per-claim verdict word (those live in the breakdown + the claim cards).
+  const faceWord = seal.verdictWord;
 
   return `
     <div class="relative grid place-items-center w-44 h-44 sm:w-52 sm:h-52 rounded-full b4 border-ink ${face} hard-lg"

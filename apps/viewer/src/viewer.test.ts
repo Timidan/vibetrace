@@ -979,7 +979,8 @@ describe("receipts card — sealState (honest fail states)", () => {
     const bundle = attestedBundle();
     const state: SealState = sealState(bundle, verifyBundleHash(bundle));
     expect(state.kind).toBe("attested");
-    expect(state.verdictWord).toBe("SUBSTANTIATED");
+    // the seal HEADLINES the attestation state, not the per-claim verdict
+    expect(state.verdictWord).toBe("0G TEE EXAMINED");
     // rim ornament IS the real enclave signature (shortened) + signing address
     expect(state.sigShort).toContain(TEST_SIGNATURE.slice(0, 6));
     expect(state.signingAddress).toBe(TEST_SIGNING_ADDRESS);
@@ -1053,7 +1054,7 @@ describe("receipts card — sealState (honest fail states)", () => {
     expect(html).not.toContain("0G TEE EXAMINED");
   });
 
-  it("attested + worst verdict inflated → INFLATED word, wax class (honest downgrade)", () => {
+  it("attested seal headlines the examination state, NEVER the worst per-claim verdict", () => {
     const bundle = attestedBundle({
       verdicts: [
         { claimId: "a", verdict: "substantiated" },
@@ -1062,7 +1063,9 @@ describe("receipts card — sealState (honest fail states)", () => {
     });
     const state = sealState(bundle, verifyBundleHash(bundle));
     expect(state.kind).toBe("attested");
-    expect(state.verdictWord).toBe("INFLATED");
+    // NOT "INFLATED" — the seal is the attestation state; the per-claim verdicts live in the
+    // stat-row breakdown + the examiner claim cards, so a mixed result never reads as a fail.
+    expect(state.verdictWord).toBe("0G TEE EXAMINED");
     expect(state.verdictClass).toContain("bg-wax");
   });
 
@@ -1807,14 +1810,13 @@ describe("renderReceiptsCard front (replaces the spinning stamp)", () => {
     expect(html).toContain('data-seal-kind="attested"');
   });
 
-  it("POLISH: the attested seal FACE prefixes the verdict word with 'VERDICT:' (it is the verdict, not a pass/fail attestation)", () => {
+  it("the attested seal FACE headlines '0G TEE EXAMINED', never a scary per-claim 'VERDICT: UNSUPPORTED'", () => {
     const bundle = attestedBundle({ verdicts: [{ claimId: "a", verdict: "unsupported" }] });
     const score = scoreBundle(bundle);
     const html = renderBundle(bundle, score);
-    expect(html).toContain("VERDICT: UNSUPPORTED");
-    // rim/band keep the examined wording, NOT prefixed
+    // the seal face is the attestation state — it does NOT headline the per-claim verdict
     expect(html).toContain("0G TEE EXAMINED");
-    expect(html).not.toContain("VERDICT: 0G TEE EXAMINED");
+    expect(html).not.toContain("VERDICT: UNSUPPORTED");
   });
 
   it("POLISH: the CRACKED face shows SEAL UNVERIFIED WITHOUT a 'VERDICT:' prefix (it's not a verdict)", () => {
