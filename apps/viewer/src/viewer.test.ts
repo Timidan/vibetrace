@@ -1597,6 +1597,22 @@ describe("registry-core handlers", () => {
     }
   });
 
+  it("createStore fails closed on a present-but-invalid cap env (no silent fallback to the high default)", async () => {
+    const key = "VIBETRACE_REGISTRY_MAX_SUBMIT_MB";
+    const prev = process.env[key];
+    const dir = mkdtempSync(join(tmpdir(), "vibetrace-core-"));
+    try {
+      process.env[key] = "16m"; // a units typo — must NOT silently resolve to the 64MB default
+      await expect(createStore({ storePath: join(dir, "store.json"), seedDir: SEED_DIR })).rejects.toThrow(
+        /positive number/i
+      );
+    } finally {
+      if (prev === undefined) delete process.env[key];
+      else process.env[key] = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("readLimitedRequestBody enforces its byte cap (an over-cap stream is rejected)", async () => {
     async function* chunks(): AsyncGenerator<Buffer> {
       yield Buffer.alloc(64 * 1024);

@@ -6301,7 +6301,7 @@ var requiredRealChainEnv = [
 ];
 var requiredRealStorageEnv = requiredRealChainEnv;
 var requiredRealComputeEnv = ["VIBETRACE_RELAYER_URL"];
-var defaultRegistryUrl = "http://localhost:5173";
+var defaultRegistryUrl = "https://vibetrace.timidan.xyz";
 async function runCli(argv, options = {}) {
   const cwd = resolve3(options.cwd ?? process.cwd());
   const now = options.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
@@ -7445,12 +7445,13 @@ jobs:
     env:
       VIBETRACE_REGISTRY_URL: \${{ vars.VIBETRACE_REGISTRY_URL }}
       VIBETRACE_VIEWER_URL: \${{ vars.VIBETRACE_VIEWER_URL }}
-      # DEFAULT path \u2014 point at a VibeTrace relayer. It funds ALL 0G writes (anchor + storage +
-      # compute) with its own key, so this workflow needs NO funded key of its own.
+      # OPTIONAL attested path \u2014 set this to a VibeTrace relayer YOU operate or are authorized to use.
+      # It funds ALL 0G writes (anchor + storage + compute) with ITS key, so this workflow needs none.
+      # Leave UNSET to skip attestation and run the keyless local verifier (the default).
       VIBETRACE_RELAYER_URL: \${{ vars.VIBETRACE_RELAYER_URL }}
       VIBETRACE_RELAYER_AUTH_TOKEN: \${{ secrets.VIBETRACE_RELAYER_AUTH_TOKEN }}
-      # ADVANCED (self-hosted) \u2014 leave UNSET to use the hosted relayer above. Set VIBETRACE_OG_MODE
-      # (real / real-chain) plus your OWN funded VIBETRACE_0G_PRIVATE_KEY to anchor locally instead.
+      # SELF-FUNDED path \u2014 instead of a relayer, set VIBETRACE_OG_MODE (real / real-chain) plus your
+      # OWN funded VIBETRACE_0G_PRIVATE_KEY to anchor on 0G locally with your own gas.
       VIBETRACE_OG_MODE: \${{ vars.VIBETRACE_OG_MODE }}
       VIBETRACE_0G_CHAIN_ID: \${{ vars.VIBETRACE_0G_CHAIN_ID }}
       VIBETRACE_0G_RPC_URL: \${{ vars.VIBETRACE_0G_RPC_URL }}
@@ -7675,7 +7676,7 @@ function invokedAsMain() {
     return false;
   }
 }
-if (invokedAsMain()) {
+if (invokedAsMain() && !globalThis.__VIBETRACE_RELAYER__) {
   runCli(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

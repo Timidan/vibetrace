@@ -116,7 +116,7 @@ export function registryPlugin(): Plugin {
           if (method === "POST" && path === "/submit") {
             let raw: string;
             try {
-              raw = await readLimitedRequestBody(req);
+              raw = await readLimitedRequestBody(req, activeStore.limits.maxSubmitBytes);
             } catch (err) {
               if (isRequestBodyTooLargeError(err)) {
                 res.statusCode = 413;

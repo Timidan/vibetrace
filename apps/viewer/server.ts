@@ -133,7 +133,7 @@ async function handleApi(
   if (method === "POST" && path === "/submit") {
     let raw: string;
     try {
-      raw = await readLimitedRequestBody(req);
+      raw = await readLimitedRequestBody(req, store.limits.maxSubmitBytes);
     } catch (err) {
       if (isRequestBodyTooLargeError(err)) {
         sendError(res, 413, err.message);

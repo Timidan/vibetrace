@@ -125,9 +125,16 @@ export type RegistryLimits = {
   maxBundleArrayItems: number;
 };
 
+// Fail CLOSED on a present-but-invalid cap: a misconfigured DoS guard (e.g. "16m" instead of "16")
+// must not silently fall through to the higher default. Absent/empty → the documented fallback.
 function envNumber(name: string, fallback: number): number {
-  const value = Number(process.env[name] ?? fallback);
-  return Number.isFinite(value) ? value : fallback;
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${name} must be a positive number (got ${JSON.stringify(raw)})`);
+  }
+  return value;
 }
 
 function registryLimitsFromEnv(): RegistryLimits {

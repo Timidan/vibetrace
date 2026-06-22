@@ -633,7 +633,7 @@ async function verifyLedger(
     claims: ledger.claims
   });
   // Pass the env through so runVibeTraceVerifier can pick up VIBETRACE_RELAYER_URL and
-  // delegate the JUDGMENT leg to the hosted relayer (attested by default). The CLI never
+  // delegate the JUDGMENT leg to the hosted relayer (attested when one is configured). The CLI never
   // holds the funded key; the relayer's attestation is re-validated locally inside the
   // verifier. If no relayer is configured (or it is unreachable / unverifiable), this
   // degrades honestly to the structural-only local verifier.
@@ -1111,7 +1111,7 @@ async function publishLedger(
     createdAt: now()
   };
   const latestSnapshot = verifiedLedger.snapshots.at(-1);
-  // By DEFAULT the funded 0G writes are delegated to the hosted relayer (it anchors + uploads with its
+  // When a relayer is configured, the funded 0G writes are delegated to it (it anchors + uploads with its
   // own key, so the user needs none). The hosted relayer always uses REAL 0G Storage; a local "real"
   // mode does too. Either path yields a real 0G Storage object, so the storage badge reflects that —
   // and we still block promoting it to "verified" when the verdict is unsupported. Badges are
@@ -1151,10 +1151,11 @@ async function publishLedger(
     storageAnchor: placeholderStorage,
     chainAnchor: placeholderChain
   };
-  // FUNDED 0G writes (storage upload + chain anchor + read-back). DEFAULT: delegate to the hosted
-  // VibeTrace relayer (POST /publish), which funds them with ITS key — so `npx vibetrace` needs no
-  // private key or gas. With NO relayer configured, fall back to the LOCAL adapters (dev = free +
-  // keyless; or a self-hosted real run with your own key). The receipt is re-verified before we trust it.
+  // FUNDED 0G writes (storage upload + chain anchor + read-back). When VIBETRACE_RELAYER_URL is set,
+  // delegate to that hosted VibeTrace relayer (POST /publish), which funds them with ITS key — so the
+  // client needs no private key or gas. With NO relayer configured (the default), fall back to the LOCAL
+  // adapters (dev = free + keyless; or a self-hosted real run with your own key). The receipt is
+  // re-verified before we trust it.
   let bundleWithSidecar: PublicLedgerBundle & { verifyAgainst0G: VerifyAgainst0G };
   if (relayerUrl) {
     bundleWithSidecar = await publishViaRelayer(relayerUrl, env.VIBETRACE_RELAYER_AUTH_TOKEN, pendingBundle);
@@ -1692,12 +1693,13 @@ jobs:
     env:
       VIBETRACE_REGISTRY_URL: \${{ vars.VIBETRACE_REGISTRY_URL }}
       VIBETRACE_VIEWER_URL: \${{ vars.VIBETRACE_VIEWER_URL }}
-      # DEFAULT path — point at a VibeTrace relayer. It funds ALL 0G writes (anchor + storage +
-      # compute) with its own key, so this workflow needs NO funded key of its own.
+      # OPTIONAL attested path — set this to a VibeTrace relayer YOU operate or are authorized to use.
+      # It funds ALL 0G writes (anchor + storage + compute) with ITS key, so this workflow needs none.
+      # Leave UNSET to skip attestation and run the keyless local verifier (the default).
       VIBETRACE_RELAYER_URL: \${{ vars.VIBETRACE_RELAYER_URL }}
       VIBETRACE_RELAYER_AUTH_TOKEN: \${{ secrets.VIBETRACE_RELAYER_AUTH_TOKEN }}
-      # ADVANCED (self-hosted) — leave UNSET to use the hosted relayer above. Set VIBETRACE_OG_MODE
-      # (real / real-chain) plus your OWN funded VIBETRACE_0G_PRIVATE_KEY to anchor locally instead.
+      # SELF-FUNDED path — instead of a relayer, set VIBETRACE_OG_MODE (real / real-chain) plus your
+      # OWN funded VIBETRACE_0G_PRIVATE_KEY to anchor on 0G locally with your own gas.
       VIBETRACE_OG_MODE: \${{ vars.VIBETRACE_OG_MODE }}
       VIBETRACE_0G_CHAIN_ID: \${{ vars.VIBETRACE_0G_CHAIN_ID }}
       VIBETRACE_0G_RPC_URL: \${{ vars.VIBETRACE_0G_RPC_URL }}
