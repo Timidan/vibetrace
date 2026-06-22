@@ -26,7 +26,10 @@ import {
   handleRegistry,
   handleSubmit,
   isRequestBodyTooLargeError,
-  readLimitedRequestBody,
+  isRequestBodyDecodeError,
+  readAndDecodeSubmitBody,
+  tryAcquireSubmitSlot,
+  releaseSubmitSlot,
   type CoreResult,
   type RegistryStore
 } from "./registry-core";
@@ -131,17 +134,29 @@ async function handleApi(
 
   // POST /api/submit
   if (method === "POST" && path === "/submit") {
-    let raw: string;
-    try {
-      raw = await readLimitedRequestBody(req, store.limits.maxSubmitBytes);
-    } catch (err) {
-      if (isRequestBodyTooLargeError(err)) {
-        sendError(res, 413, err.message);
-        return;
-      }
-      throw err;
+    if (!tryAcquireSubmitSlot()) {
+      sendError(res, 429, "Too many concurrent submissions; retry shortly");
+      return;
     }
-    applyResult(res, await handleSubmit(store, raw));
+    try {
+      let raw: string;
+      try {
+        raw = await readAndDecodeSubmitBody(req, req.headers["content-encoding"], store.limits);
+      } catch (err) {
+        if (isRequestBodyTooLargeError(err)) {
+          sendError(res, 413, err.message);
+          return;
+        }
+        if (isRequestBodyDecodeError(err)) {
+          sendError(res, 400, err.message);
+          return;
+        }
+        throw err;
+      }
+      applyResult(res, await handleSubmit(store, raw));
+    } finally {
+      releaseSubmitSlot();
+    }
     return;
   }
 

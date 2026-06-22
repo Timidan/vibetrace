@@ -28,6 +28,7 @@
  *   POST /api/submit         -> { entry } | 4xx { error }   body: { bundle }
  */
 
+import { gunzipSync, inflateSync } from "node:zlib";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,17 +112,25 @@ export type CoreResult = {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STORE_PATH = resolve(HERE, ".vibetrace-registry.json");
 const DEFAULT_SEED_DIR = resolve(HERE, "../../.vibetrace/public");
-// A real project's public bundle (full artifact graph + snapshot) can be tens of MB with hundreds
-// of thousands of nodes/edges, so the original 5MB / 10k caps rejected legitimate large submissions.
-// Env-derived limits keep floors so production config can only RAISE the original caps; test overrides
-// (via createStore) intentionally bypass the floors so tests can use tiny caps without huge allocations.
+// A real project's public bundle (full artifact graph + snapshot) is hashes and paths — highly
+// compressible. The CLI gzips the POST body, so the WIRE cap (maxSubmitBytes) governs the small
+// compressed payload while the INFLATE cap (maxInflatedBytes) is the real RAM bound on the decoded
+// JSON we parse. A modest wire cap therefore accepts an enormous raw bundle without per-user tuning,
+// and the inflate cap (a fixed ceiling far above any real bundle) is the zip-bomb / OOM guard.
+// Env-derived limits keep floors so production config can only RAISE them; test overrides (via
+// createStore) intentionally bypass the floors so tests can use tiny caps without huge allocations.
 const MIN_SUBMIT_BODY_MB = 5;
-const DEFAULT_SUBMIT_BODY_MB = 64;
+const DEFAULT_SUBMIT_BODY_MB = 32;
+const MIN_INFLATED_BODY_MB = 16;
+const DEFAULT_INFLATED_BODY_MB = 128;
 const MIN_BUNDLE_ARRAY_ITEMS = 10_000;
 const DEFAULT_BUNDLE_ARRAY_ITEMS = 400_000;
 
 export type RegistryLimits = {
+  /** Cap on the raw bytes read off the socket (the gzipped payload for modern clients). */
   maxSubmitBytes: number;
+  /** Cap on the DECODED body the server parses — the real RAM bound / zip-bomb guard. */
+  maxInflatedBytes: number;
   maxBundleArrayItems: number;
 };
 
@@ -139,9 +148,11 @@ function envNumber(name: string, fallback: number): number {
 
 function registryLimitsFromEnv(): RegistryLimits {
   const submitMb = envNumber("VIBETRACE_REGISTRY_MAX_SUBMIT_MB", DEFAULT_SUBMIT_BODY_MB);
+  const inflatedMb = envNumber("VIBETRACE_REGISTRY_MAX_INFLATED_MB", DEFAULT_INFLATED_BODY_MB);
   const arrayItems = envNumber("VIBETRACE_REGISTRY_MAX_ARRAY_ITEMS", DEFAULT_BUNDLE_ARRAY_ITEMS);
   return {
     maxSubmitBytes: Math.max(MIN_SUBMIT_BODY_MB, submitMb) * 1024 * 1024,
+    maxInflatedBytes: Math.max(MIN_INFLATED_BODY_MB, inflatedMb) * 1024 * 1024,
     maxBundleArrayItems: Math.max(MIN_BUNDLE_ARRAY_ITEMS, arrayItems)
   };
 }
@@ -150,12 +161,32 @@ function resolveRegistryLimits(overrides: Partial<RegistryLimits> = {}): Registr
   const env = registryLimitsFromEnv();
   return {
     maxSubmitBytes: overrides.maxSubmitBytes ?? env.maxSubmitBytes,
+    maxInflatedBytes: overrides.maxInflatedBytes ?? env.maxInflatedBytes,
     maxBundleArrayItems: overrides.maxBundleArrayItems ?? env.maxBundleArrayItems
   };
 }
 /** Cap total stored entries so unauthenticated submissions can't grow the store
  *  (and the on-disk JSON it rewrites every submit) without bound. */
 const MAX_REGISTRY_ENTRIES = 1000;
+
+// Bound CONCURRENT /api/submit handling: each accepted submit transiently holds the decoded body +
+// its parsed object graph in memory, so even two near-cap submits at once can OOM a small host.
+// Defaults to 1 (serialize submits) — fail safe; raise via env only on a host with headroom.
+// Module-level (single process). Excess submits are rejected with 429 by the adapters.
+const MAX_ACTIVE_SUBMITS = Math.max(1, envNumber("VIBETRACE_REGISTRY_MAX_ACTIVE_SUBMITS", 1));
+let activeSubmits = 0;
+
+/** Try to reserve a submit slot. Returns false when MAX_ACTIVE_SUBMITS are already in flight; the
+ *  caller must then 429. Pair every `true` with exactly one releaseSubmitSlot() in a finally. */
+export function tryAcquireSubmitSlot(): boolean {
+  if (activeSubmits >= MAX_ACTIVE_SUBMITS) return false;
+  activeSubmits += 1;
+  return true;
+}
+
+export function releaseSubmitSlot(): void {
+  activeSubmits = Math.max(0, activeSubmits - 1);
+}
 const HEX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
 
 export class RequestBodyTooLargeError extends Error {
@@ -169,10 +200,24 @@ export function isRequestBodyTooLargeError(err: unknown): err is RequestBodyTooL
   return err instanceof RequestBodyTooLargeError;
 }
 
-export async function readLimitedRequestBody(
+/** Thrown when a request body is declared compressed but cannot be decompressed (malformed payload). */
+export class RequestBodyDecodeError extends Error {
+  constructor(message = "Could not decode the request body") {
+    super(message);
+    this.name = "RequestBodyDecodeError";
+  }
+}
+
+export function isRequestBodyDecodeError(err: unknown): err is RequestBodyDecodeError {
+  return err instanceof RequestBodyDecodeError;
+}
+
+/** Read the raw request bytes off the socket, aborting as soon as the WIRE cap is exceeded so an
+ *  oversized upload never fully buffers. Returns the (possibly compressed) bytes for decodeSubmitBody. */
+export async function readLimitedRequestBodyBytes(
   stream: AsyncIterable<unknown>,
   maxBytes = registryLimitsFromEnv().maxSubmitBytes
-): Promise<string> {
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
 
@@ -190,7 +235,69 @@ export async function readLimitedRequestBody(
     chunks.push(buf);
   }
 
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks);
+}
+
+/** Back-compat string reader (uncompressed bodies). New callers should prefer the bytes reader +
+ *  decodeSubmitBody so they get gzip support and a separate inflate cap. */
+export async function readLimitedRequestBody(
+  stream: AsyncIterable<unknown>,
+  maxBytes = registryLimitsFromEnv().maxSubmitBytes
+): Promise<string> {
+  return (await readLimitedRequestBodyBytes(stream, maxBytes)).toString("utf8");
+}
+
+/** Decode a submission body to its JSON text. gzip/deflate payloads (Content-Encoding) are inflated
+ *  with a hard output cap so a small compressed body can never expand into an unbounded allocation
+ *  (zip-bomb guard). Uncompressed bodies pass through, still bounded by maxInflatedBytes. */
+export function decodeSubmitBody(
+  body: Buffer,
+  contentEncoding: string | undefined,
+  maxInflatedBytes = registryLimitsFromEnv().maxInflatedBytes
+): string {
+  const encoding = (contentEncoding ?? "").toLowerCase().trim();
+  if (encoding === "gzip" || encoding === "deflate") {
+    let out: Buffer;
+    try {
+      out =
+        encoding === "gzip"
+          ? gunzipSync(body, { maxOutputLength: maxInflatedBytes })
+          : inflateSync(body, { maxOutputLength: maxInflatedBytes });
+    } catch (err) {
+      // zlib throws a RangeError (ERR_BUFFER_TOO_LARGE) DURING expansion once output would exceed
+      // maxOutputLength — so peak allocation is bounded, not just the final length.
+      if (err instanceof RangeError) throw new RequestBodyTooLargeError(maxInflatedBytes);
+      throw new RequestBodyDecodeError(`Could not decompress ${encoding} request body`);
+    }
+    return out.toString("utf8");
+  }
+  if (encoding && encoding !== "identity") {
+    throw new RequestBodyDecodeError(`Unsupported Content-Encoding: ${encoding}`);
+  }
+  if (body.length > maxInflatedBytes) throw new RequestBodyTooLargeError(maxInflatedBytes);
+  return body.toString("utf8");
+}
+
+/** Read the request body off the socket and decode it to JSON text. The WIRE read cap depends on the
+ *  encoding: a compressed payload is bounded by the small maxSubmitBytes; an identity (uncompressed)
+ *  body IS the final content, so it is bounded by the larger maxInflatedBytes — preserving the
+ *  uncompressed ceiling for older clients that don't gzip. Throws RequestBodyTooLargeError (→413) or
+ *  RequestBodyDecodeError (→400). */
+export async function readAndDecodeSubmitBody(
+  stream: AsyncIterable<unknown>,
+  contentEncoding: string | undefined,
+  limits: Pick<RegistryLimits, "maxSubmitBytes" | "maxInflatedBytes">
+): Promise<string> {
+  const enc = (contentEncoding ?? "").toLowerCase().trim();
+  const compressed = enc === "gzip" || enc === "deflate";
+  // Reject an unsupported encoding BEFORE reading the body, so a mislabeled payload can't first consume
+  // up to maxInflatedBytes only to be rejected.
+  if (enc && !compressed && enc !== "identity") {
+    throw new RequestBodyDecodeError(`Unsupported Content-Encoding: ${enc}`);
+  }
+  const wireCap = compressed ? limits.maxSubmitBytes : limits.maxInflatedBytes;
+  const bytes = await readLimitedRequestBodyBytes(stream, wireCap);
+  return decodeSubmitBody(bytes, contentEncoding, limits.maxInflatedBytes);
 }
 
 /* ── store: a small object that owns the in-memory entries + its paths ── */
@@ -926,10 +1033,12 @@ export async function handleBadge(
  * FileVersion hash overlap), and persisted.
  */
 export async function handleSubmit(store: RegistryStore, jsonBody: string): Promise<CoreResult> {
-  const { maxSubmitBytes } = store.limits;
-  if (Buffer.byteLength(jsonBody, "utf8") > maxSubmitBytes) {
+  // jsonBody is the already-DECODED body (the adapter inflates gzip before calling), so it is bounded
+  // by the inflate cap, not the wire cap. The wire cap was enforced upstream in readLimitedRequestBodyBytes.
+  const { maxInflatedBytes } = store.limits;
+  if (Buffer.byteLength(jsonBody, "utf8") > maxInflatedBytes) {
     return jsonResult(413, {
-      error: `Request body too large (max ${Math.floor(maxSubmitBytes / (1024 * 1024))}MB)`
+      error: `Request body too large (max ${Math.floor(maxInflatedBytes / (1024 * 1024))}MB)`
     });
   }
 

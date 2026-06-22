@@ -45,10 +45,19 @@ import {
   handleBadge,
   handleSubmit,
   readLimitedRequestBody,
+  readLimitedRequestBodyBytes,
+  decodeSubmitBody,
+  readAndDecodeSubmitBody,
+  tryAcquireSubmitSlot,
+  releaseSubmitSlot,
+  isRequestBodyTooLargeError,
+  isRequestBodyDecodeError,
   writeJsonFileAtomic,
   type RegistryLimits,
   type RegistryStore
 } from "../registry-core";
+import { gzipSync } from "node:zlib";
+import { randomBytes } from "node:crypto";
 import { Wallet, hashMessage } from "ethers";
 
 /* ── Recovering TEE-execution attestation material. The TEE/seal display gate
@@ -1581,12 +1590,12 @@ describe("registry-core handlers", () => {
     }
   });
 
-  it("handleSubmit rejects request bodies over the cap before parsing", async () => {
-    const { store, dir } = await freshTempStore({ maxSubmitBytes: TEST_SUBMIT_BODY_BYTES });
+  it("handleSubmit rejects decoded bodies over the inflate cap before parsing", async () => {
+    const { store, dir } = await freshTempStore({ maxInflatedBytes: TEST_SUBMIT_BODY_BYTES });
     try {
       const before = store.entries.length;
-      const tooLarge = JSON.stringify({ bundle: null, padding: "x".repeat(store.limits.maxSubmitBytes) });
-      expect(Buffer.byteLength(tooLarge, "utf8")).toBeGreaterThan(store.limits.maxSubmitBytes);
+      const tooLarge = JSON.stringify({ bundle: null, padding: "x".repeat(store.limits.maxInflatedBytes) });
+      expect(Buffer.byteLength(tooLarge, "utf8")).toBeGreaterThan(store.limits.maxInflatedBytes);
 
       const res = await handleSubmit(store, tooLarge);
       expect(res.status).toBe(413);
@@ -1595,6 +1604,92 @@ describe("registry-core handlers", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("decodeSubmitBody round-trips a gzip-encoded body (the CLI's compressed submission)", () => {
+    const json = JSON.stringify({ bundle: { hello: "world", arr: [1, 2, 3] } });
+    const gz = gzipSync(Buffer.from(json, "utf8"));
+    expect(decodeSubmitBody(gz, "gzip", 1024 * 1024)).toBe(json);
+  });
+
+  it("decodeSubmitBody passes an uncompressed body through unchanged (back-compat)", () => {
+    const json = JSON.stringify({ bundle: null });
+    expect(decodeSubmitBody(Buffer.from(json, "utf8"), undefined, 1024 * 1024)).toBe(json);
+  });
+
+  it("decodeSubmitBody enforces the inflate cap on a tiny-but-expanding gzip body (zip-bomb guard)", () => {
+    const bomb = gzipSync(Buffer.alloc(4 * 1024 * 1024, 0x61)); // 4MB of 'a' → a few KB compressed
+    expect(bomb.length).toBeLessThan(64 * 1024);
+    try {
+      decodeSubmitBody(bomb, "gzip", 1024); // 1KB inflate cap
+      throw new Error("expected decodeSubmitBody to reject the over-cap inflation");
+    } catch (err) {
+      expect(isRequestBodyTooLargeError(err)).toBe(true);
+    }
+  });
+
+  it("decodeSubmitBody reports a malformed compressed body as a decode error (400, not 500)", () => {
+    try {
+      decodeSubmitBody(Buffer.from("this is not gzip", "utf8"), "gzip", 1024 * 1024);
+      throw new Error("expected decodeSubmitBody to reject malformed gzip");
+    } catch (err) {
+      expect(isRequestBodyDecodeError(err)).toBe(true);
+    }
+  });
+
+  it("readLimitedRequestBodyBytes aborts once the wire cap is exceeded", async () => {
+    async function* chunks(): AsyncGenerator<Buffer> {
+      yield Buffer.alloc(700);
+      yield Buffer.alloc(700); // 1400 > 1024 cap
+    }
+    await expect(readLimitedRequestBodyBytes(chunks(), 1024)).rejects.toSatisfy(isRequestBodyTooLargeError);
+  });
+
+  // readAndDecodeSubmitBody is the adapter's core (wire-cap-by-encoding + decode). These exercise the
+  // exact path POST /api/submit runs, without standing up an HTTP server.
+  const oneShot = (buf: Buffer): AsyncIterable<Buffer> => ({
+    async *[Symbol.asyncIterator]() {
+      yield buf;
+    }
+  });
+  const CAPS = { maxSubmitBytes: 1024, maxInflatedBytes: 1024 * 1024 };
+
+  it("readAndDecodeSubmitBody accepts a gzip body whose WIRE size is under maxSubmitBytes", async () => {
+    const json = JSON.stringify({ bundle: { ok: true } });
+    const gz = gzipSync(Buffer.from(json, "utf8"));
+    expect(gz.length).toBeLessThan(CAPS.maxSubmitBytes);
+    expect(await readAndDecodeSubmitBody(oneShot(gz), "gzip", CAPS)).toBe(json);
+  });
+
+  it("readAndDecodeSubmitBody accepts an UNCOMPRESSED body over maxSubmitBytes but under maxInflatedBytes", async () => {
+    // Proves identity bodies are bounded by the inflate cap, not the small wire cap (no regression for
+    // older non-gzip clients).
+    const json = JSON.stringify({ bundle: null, pad: "x".repeat(5000) }); // > 1024 wire cap
+    expect(Buffer.byteLength(json, "utf8")).toBeGreaterThan(CAPS.maxSubmitBytes);
+    expect(await readAndDecodeSubmitBody(oneShot(Buffer.from(json, "utf8")), undefined, CAPS)).toBe(json);
+  });
+
+  it("readAndDecodeSubmitBody rejects a gzip body whose WIRE size exceeds maxSubmitBytes (413)", async () => {
+    const wire = gzipSync(randomBytes(4000)); // incompressible → gzip stays > 1024 wire cap
+    expect(wire.length).toBeGreaterThan(CAPS.maxSubmitBytes);
+    await expect(readAndDecodeSubmitBody(oneShot(wire), "gzip", CAPS)).rejects.toSatisfy(isRequestBodyTooLargeError);
+  });
+
+  it("readAndDecodeSubmitBody rejects an unsupported Content-Encoding (400)", async () => {
+    await expect(
+      readAndDecodeSubmitBody(oneShot(Buffer.from("payload")), "br", CAPS)
+    ).rejects.toSatisfy(isRequestBodyDecodeError);
+  });
+
+  it("tryAcquireSubmitSlot bounds concurrent submits and releases cleanly", () => {
+    // Default MAX_ACTIVE_SUBMITS is 1 (serialize submits — fail safe).
+    const a = tryAcquireSubmitSlot();
+    const b = tryAcquireSubmitSlot();
+    expect([a, b]).toEqual([true, false]);
+    releaseSubmitSlot();
+    expect(tryAcquireSubmitSlot()).toBe(true);
+    releaseSubmitSlot();
+    releaseSubmitSlot(); // idempotent floor at 0
   });
 
   it("createStore fails closed on a present-but-invalid cap env (no silent fallback to the high default)", async () => {

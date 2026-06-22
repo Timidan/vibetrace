@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import { buildArtifactGraph } from "@vibetrace/graph";
 import { collectClaudeCode } from "./collect.js";
 import { collectCodex } from "./codex-collect.js";
@@ -449,10 +450,13 @@ async function shipFlow(
   }
 
   try {
+    // Public bundles are hashes + paths — highly compressible. gzip the body so even a large repo's
+    // bundle stays a few MB on the wire (the board enforces a small wire cap + a bounded inflate cap).
+    const gzipped = gzipSync(Buffer.from(JSON.stringify({ bundle }), "utf8"));
     const response = await fetch(`${registryUrl}/api/submit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bundle })
+      headers: { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+      body: gzipped
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");

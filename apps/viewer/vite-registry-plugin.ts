@@ -22,7 +22,10 @@ import {
   handleRegistry,
   handleSubmit,
   isRequestBodyTooLargeError,
-  readLimitedRequestBody,
+  isRequestBodyDecodeError,
+  readAndDecodeSubmitBody,
+  tryAcquireSubmitSlot,
+  releaseSubmitSlot,
   setModuleLoader,
   type CoreResult,
   type RegistryStore
@@ -42,8 +45,11 @@ export {
   handleRegistry,
   handleSubmit,
   isRequestBodyTooLargeError,
+  isRequestBodyDecodeError,
   isPublicLedgerBundle,
   readLimitedRequestBody,
+  readLimitedRequestBodyBytes,
+  decodeSubmitBody,
   mutedBadgeSvg,
   renderBadgeForId,
   setModuleLoader,
@@ -114,20 +120,31 @@ export function registryPlugin(): Plugin {
 
           // POST /api/submit
           if (method === "POST" && path === "/submit") {
-            let raw: string;
-            try {
-              raw = await readLimitedRequestBody(req, activeStore.limits.maxSubmitBytes);
-            } catch (err) {
-              if (isRequestBodyTooLargeError(err)) {
-                res.statusCode = 413;
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.setHeader("Cache-Control", "no-store");
-                res.end(JSON.stringify({ error: err.message }));
-                return;
-              }
-              throw err;
+            if (!tryAcquireSubmitSlot()) {
+              res.statusCode = 429;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.setHeader("Cache-Control", "no-store");
+              res.end(JSON.stringify({ error: "Too many concurrent submissions; retry shortly" }));
+              return;
             }
-            applyResult(res, await handleSubmit(activeStore, raw));
+            try {
+              let raw: string;
+              try {
+                raw = await readAndDecodeSubmitBody(req, req.headers["content-encoding"], activeStore.limits);
+              } catch (err) {
+                if (isRequestBodyTooLargeError(err) || isRequestBodyDecodeError(err)) {
+                  res.statusCode = isRequestBodyTooLargeError(err) ? 413 : 400;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.setHeader("Cache-Control", "no-store");
+                  res.end(JSON.stringify({ error: err.message }));
+                  return;
+                }
+                throw err;
+              }
+              applyResult(res, await handleSubmit(activeStore, raw));
+            } finally {
+              releaseSubmitSlot();
+            }
             return;
           }
 

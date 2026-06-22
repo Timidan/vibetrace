@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute as isAbsolute2, join as join4, relative as relative3, resolve as resolve3 } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 
 // ../../node_modules/.pnpm/@noble+hashes@1.8.0/node_modules/@noble/hashes/esm/utils.js
 function isBytes(a) {
@@ -6524,10 +6525,11 @@ async function shipFlow(cwd, argv, now, env, stdout, promptYesNo = defaultPrompt
     return;
   }
   try {
+    const gzipped = gzipSync(Buffer.from(JSON.stringify({ bundle }), "utf8"));
     const response = await fetch(`${registryUrl}/api/submit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bundle })
+      headers: { "Content-Type": "application/json", "Content-Encoding": "gzip" },
+      body: gzipped
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
