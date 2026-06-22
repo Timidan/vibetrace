@@ -131,6 +131,10 @@ type VibeTraceConfig = {
   };
   traces: {
     include: string[];
+    /** Former absolute paths of THIS repo (e.g. before a folder rename). Agent sessions whose cwd /
+     *  edited files live under an alias are credited to this repo (paths remapped to the current root),
+     *  so a rename like og-labs -> vibetrace doesn't orphan the historical build traces. */
+    repoAliases?: string[];
   };
   publish: {
     publicBundlePath?: string;
@@ -340,13 +344,20 @@ async function collectTraces(
     // Fall back to the resolved cwd if realpath fails.
   }
 
+  // Former paths of this repo (config.traces.repoAliases) — e.g. before a folder rename. Normalize to
+  // absolute, strip trailing slashes, drop the current root. Do NOT realpath (old paths may not exist).
+  const config = await readConfig(cwd);
+  const repoAliases = (config.traces.repoAliases ?? [])
+    .map((a) => resolve(a).replace(/\/+$/, ""))
+    .filter((a) => a.length > 0 && a !== repoRoot);
+
   // First pass: count matches so the disclosure is honest before we emit output.
   // Two local sources: Claude Code transcripts (~/.claude) AND Codex rollouts
   // (~/.codex). Codex edits live outside ~/.claude, so without the second source
   // the gpt-5.x work on this repo would be completely uncredited.
   const nowIso = now();
-  const claudeProbe = await collectClaudeCode({ repoRoot, now: nowIso, includeExcerpts });
-  const codexProbe = await collectCodex({ repoRoot, now: nowIso, includeExcerpts });
+  const claudeProbe = await collectClaudeCode({ repoRoot, now: nowIso, includeExcerpts, repoAliases });
+  const codexProbe = await collectCodex({ repoRoot, now: nowIso, includeExcerpts, repoAliases });
   const probe = {
     spans: [...claudeProbe.spans, ...codexProbe.spans].sort(
       (a, b) => a.startedAt.localeCompare(b.startedAt) || a.spanId.localeCompare(b.spanId)
@@ -366,6 +377,9 @@ async function collectTraces(
     }.`
   );
   stdout(`  Scope: only sessions whose cwd is this repo (${repoRoot}).`);
+  if (repoAliases.length > 0) {
+    stdout(`  Also counting renamed-repo aliases: ${repoAliases.join(", ")}`);
+  }
   stdout(
     `  Matched ${probe.sessionsMatched} agent run${probe.sessionsMatched === 1 ? "" : "s"} (sessions + subagents) out of ${
       probe.sessionsScanned
@@ -640,7 +654,10 @@ async function snapshotWorkspace(cwd: string, now: () => string, stdout: (messag
     packageMetadata
   };
 
-  ledger.snapshots.push(snapshot);
+  // REPLACE, don't accumulate: the build score's coverage denominator is every FileVersion across all
+  // snapshots in the bundle, so piling up historical snapshots (e.g. from re-runs across CLI versions
+  // with different ignore behavior) silently dilutes coverage. The snapshot represents the CURRENT tree.
+  ledger.snapshots = [snapshot];
   await writeLedger(cwd, ledger);
   stdout(`Captured snapshot ${snapshot.snapshotId} with ${files.length} files.`);
 }
@@ -1679,7 +1696,8 @@ async function readConfig(cwd: string): Promise<VibeTraceConfig> {
       ignore: unique([...(defaults.snapshot.ignore ?? []), ...((input.snapshot as { ignore?: string[] } | undefined)?.ignore ?? [])])
     },
     traces: {
-      include: unique([...(defaults.traces.include ?? []), ...((input.traces as { include?: string[] } | undefined)?.include ?? [])])
+      include: unique([...(defaults.traces.include ?? []), ...((input.traces as { include?: string[] } | undefined)?.include ?? [])]),
+      repoAliases: (input.traces as { repoAliases?: string[] } | undefined)?.repoAliases ?? defaults.traces.repoAliases
     },
     publish: {
       ...defaults.publish,

@@ -82,7 +82,42 @@ export type BuildSpanOptions = {
   now: string;
   /** Opt-in: include heavily-truncated text excerpts. Default false. */
   includeExcerpts?: boolean;
+  /** Former absolute paths of THIS repo (e.g. before a folder rename). A session whose cwd / edited
+   *  files live under an alias is treated as this repo, and its paths are remapped <alias>/X -> repoRoot/X
+   *  before the exists-now check, so a renamed repo's historical agent work still counts. */
+  repoAliases?: string[];
 };
+
+/** Build a `(path) -> repoRoot-relative path | null` remapper over [repoRoot, ...aliases]. Returns null
+ *  when the absolute path is under none of them; otherwise rewrites an alias prefix to the current repoRoot
+ *  (longest-prefix match; the `/` boundary keeps `/old/repo2` from matching alias `/old/repo`). */
+export function makeRepoRemapper(repoRoot: string, repoAliases: string[] = []) {
+  const roots = [repoRoot, ...repoAliases]
+    .map((r) => (r.endsWith("/") ? r.slice(0, -1) : r))
+    .filter((r) => r.length > 0)
+    .sort((a, b) => b.length - a.length); // longest first
+  const matchRoot = (abs: string): string | null => {
+    for (const root of roots) if (abs === root || abs.startsWith(`${root}/`)) return root;
+    return null;
+  };
+  return {
+    /** Is this absolute path (e.g. a session cwd) under the repo or one of its aliases? */
+    isUnderRepo: (abs: string): boolean => matchRoot(abs) !== null,
+    /** Remap an absolute path to its current repoRoot-relative form, or null if not under the repo. */
+    toRepoRelative: (abs: string): string | null => {
+      const root = matchRoot(abs);
+      if (root === null) return null;
+      const remapped = `${repoRoot}${abs.slice(root.length)}`;
+      return relative(repoRoot, remapped).replaceAll("\\", "/");
+    },
+    /** Remap an absolute path to its current ABSOLUTE form under repoRoot (for fileExists), or null. */
+    toRepoAbsolute: (abs: string): string | null => {
+      const root = matchRoot(abs);
+      if (root === null) return null;
+      return `${repoRoot}${abs.slice(root.length)}`;
+    }
+  };
+}
 
 export type BuildSpanFromAgentOptions = BuildSpanOptions & {
   /** When processing a subagent file, pass its agentId so the spanId and metadata are agent-scoped. */
@@ -100,7 +135,7 @@ export function buildSpanFromAgent(
   options: BuildSpanFromAgentOptions
 ): TraceSpan | undefined {
   const repoRoot = options.repoRoot;
-  const prefix = repoRoot.endsWith("/") ? repoRoot : `${repoRoot}/`;
+  const remapper = makeRepoRemapper(repoRoot, options.repoAliases);
 
   const agentId = options.agentId;
   let sessionId: string | undefined;
@@ -113,9 +148,6 @@ export function buildSpanFromAgent(
   const produced = new Set<string>();
   let inputTokens = 0;
   let outputTokens = 0;
-
-  const underRepo = (absPath: string): boolean =>
-    absPath === repoRoot || absPath.startsWith(prefix);
 
   for (const rec of records) {
     if (rec.sessionId && !sessionId) sessionId = rec.sessionId;
@@ -146,10 +178,10 @@ export function buildSpanFromAgent(
         outputTokens += usage.output_tokens ?? 0;
       }
       for (const { name, filePath } of toolUses(message.content)) {
-        const abs = resolve(filePath);
-        if (!underRepo(abs)) continue;
-        if (!options.fileExists(abs)) continue;
-        const rel = relative(repoRoot, abs).replaceAll("\\", "/");
+        const absInRepo = remapper.toRepoAbsolute(resolve(filePath));
+        if (absInRepo === null) continue; // not under this repo (or any alias)
+        if (!options.fileExists(absInRepo)) continue; // remapped path must still exist now
+        const rel = relative(repoRoot, absInRepo).replaceAll("\\", "/");
         if (AI_TOUCH_TOOLS.has(name)) produced.add(rel);
       }
     }
@@ -161,7 +193,7 @@ export function buildSpanFromAgent(
   // /repo/packages/score are silently skipped.
   let ranInRepo = false;
   for (const c of cwds) {
-    if (c === repoRoot || c.startsWith(prefix)) {
+    if (remapper.isUnderRepo(c)) {
       ranInRepo = true;
       break;
     }
@@ -286,6 +318,7 @@ export async function collectClaudeCode(params: {
   repoRoot: string;
   now: string;
   includeExcerpts?: boolean;
+  repoAliases?: string[];
   home?: string;
 }): Promise<CollectResult> {
   const home = params.home ?? homedir();
@@ -384,6 +417,7 @@ export async function collectClaudeCode(params: {
       fileExists,
       now: params.now,
       includeExcerpts: params.includeExcerpts,
+      repoAliases: params.repoAliases,
       agentId
     });
     if (span) {

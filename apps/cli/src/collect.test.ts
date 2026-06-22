@@ -3,7 +3,14 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildSpanFromSession, buildSpanFromAgent, parseJsonl, collectClaudeCode, type ClaudeRecord } from "./collect";
+import {
+  buildSpanFromSession,
+  buildSpanFromAgent,
+  makeRepoRemapper,
+  parseJsonl,
+  collectClaudeCode,
+  type ClaudeRecord
+} from "./collect";
 
 const REPO = "/home/dev/myrepo";
 const NOW = "2026-06-17T12:00:00.000Z";
@@ -34,6 +41,59 @@ function fakeSession(repo: string): ClaudeRecord[] {
 // Only new.ts and old.ts "exist"; ghost.ts does not.
 const existing = new Set([`${REPO}/src/new.ts`, `${REPO}/src/old.ts`]);
 const fileExists = (p: string): boolean => existing.has(p);
+
+describe("makeRepoRemapper — renamed-repo aliases", () => {
+  const r = makeRepoRemapper("/home/dev/new-name", ["/home/dev/old-name/"]);
+
+  it("passes through paths already under the current repo root", () => {
+    expect(r.toRepoAbsolute("/home/dev/new-name/src/a.ts")).toBe("/home/dev/new-name/src/a.ts");
+    expect(r.toRepoRelative("/home/dev/new-name/src/a.ts")).toBe("src/a.ts");
+  });
+
+  it("remaps an alias path to the current repo root", () => {
+    expect(r.toRepoAbsolute("/home/dev/old-name/src/a.ts")).toBe("/home/dev/new-name/src/a.ts");
+    expect(r.toRepoRelative("/home/dev/old-name/src/a.ts")).toBe("src/a.ts");
+  });
+
+  it("returns null for paths under neither root nor alias", () => {
+    expect(r.toRepoAbsolute("/home/dev/elsewhere/a.ts")).toBeNull();
+  });
+
+  it("respects the path-segment boundary (old-name2 is not the alias old-name)", () => {
+    expect(r.toRepoAbsolute("/home/dev/old-name2/a.ts")).toBeNull();
+    expect(r.isUnderRepo("/home/dev/old-name2")).toBe(false);
+  });
+
+  it("isUnderRepo matches both the current root and alias cwds", () => {
+    expect(r.isUnderRepo("/home/dev/new-name")).toBe(true);
+    expect(r.isUnderRepo("/home/dev/old-name/packages/x")).toBe(true);
+    expect(r.isUnderRepo("/somewhere/else")).toBe(false);
+  });
+});
+
+describe("buildSpanFromAgent — repoAliases credit a renamed repo's history", () => {
+  it("counts an OLD-path session, remapping its files to the current root", () => {
+    const OLD = "/home/dev/old-name";
+    // Session ran under the OLD path and edited OLD-path files; those files now live under REPO.
+    const span = buildSpanFromAgent(fakeSession(OLD), {
+      repoRoot: REPO,
+      repoAliases: [OLD],
+      fileExists: (p) => p === `${REPO}/src/new.ts` || p === `${REPO}/src/old.ts`,
+      now: NOW
+    });
+    expect(span).toBeDefined();
+    expect(span!.artifactsProduced).toEqual(["src/new.ts", "src/old.ts"]);
+  });
+
+  it("does NOT count the old-path session without the alias (the rename problem)", () => {
+    const span = buildSpanFromAgent(fakeSession("/home/dev/old-name"), {
+      repoRoot: REPO,
+      fileExists: () => true,
+      now: NOW
+    });
+    expect(span).toBeUndefined(); // cwd is under neither REPO nor any alias
+  });
+});
 
 describe("buildSpanFromSession", () => {
   it("maps Write and genuine edit tools to artifactsProduced for existing files only", () => {

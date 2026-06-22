@@ -4,7 +4,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { TraceSpan } from "@vibetrace/schema";
-import type { CollectResult } from "./collect.js";
+import { makeRepoRemapper, type CollectResult } from "./collect.js";
 
 /**
  * vibetrace collect (Codex) — reads LOCAL Codex CLI rollout transcripts
@@ -93,6 +93,8 @@ export type BuildCodexSpanOptions = {
   now: string;
   /** Opt-in: include heavily-truncated text excerpts. Default false. */
   includeExcerpts?: boolean;
+  /** Former absolute paths of THIS repo (e.g. before a rename); aliased sessions count, paths remapped. */
+  repoAliases?: string[];
 };
 
 /**
@@ -111,7 +113,7 @@ export function buildSpanFromCodexSession(
   options: BuildCodexSpanOptions
 ): TraceSpan | undefined {
   const repoRoot = options.repoRoot;
-  const prefix = repoRoot.endsWith("/") ? repoRoot : `${repoRoot}/`;
+  const remapper = makeRepoRemapper(repoRoot, options.repoAliases);
 
   let cwd: string | undefined;
   let sessionId: string | undefined;
@@ -149,17 +151,18 @@ export function buildSpanFromCodexSession(
         const base = cwd ?? repoRoot;
         for (const rel of patchFiles(p.input)) {
           const abs = isAbsolute(rel) ? rel : resolve(base, rel);
-          if (abs !== repoRoot && !abs.startsWith(prefix)) continue;
-          if (!options.fileExists(abs)) continue;
-          const r = relative(repoRoot, abs).replaceAll("\\", "/");
+          const absInRepo = remapper.toRepoAbsolute(abs);
+          if (absInRepo === null) continue; // not under this repo (or any alias)
+          if (!options.fileExists(absInRepo)) continue;
+          const r = relative(repoRoot, absInRepo).replaceAll("\\", "/");
           if (r && !r.startsWith("..")) produced.add(r);
         }
       }
     }
   }
 
-  // cwd scoping: the session must have run in THIS repo (root or a subdir).
-  if (!cwd || (cwd !== repoRoot && !cwd.startsWith(prefix))) return undefined;
+  // cwd scoping: the session must have run in THIS repo (root, a subdir, or under a configured alias).
+  if (!cwd || !remapper.isUnderRepo(cwd)) return undefined;
   if (!sessionId) return undefined;
 
   // Predominant model; skip sessions with no real model.
@@ -233,6 +236,7 @@ export async function collectCodex(params: {
   repoRoot: string;
   now: string;
   includeExcerpts?: boolean;
+  repoAliases?: string[];
   home?: string;
 }): Promise<CollectResult> {
   const home = params.home ?? homedir();
@@ -295,7 +299,8 @@ export async function collectCodex(params: {
       repoRoot: params.repoRoot,
       fileExists,
       now: params.now,
-      includeExcerpts: params.includeExcerpts
+      includeExcerpts: params.includeExcerpts,
+      repoAliases: params.repoAliases
     });
     if (span) {
       result.sessionsMatched += 1;

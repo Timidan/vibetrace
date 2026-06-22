@@ -4652,9 +4652,33 @@ function slugFromSessionId(sessionId) {
   const cleaned = sessionId.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return `claude-code:${cleaned || "session"}`;
 }
+function makeRepoRemapper(repoRoot, repoAliases = []) {
+  const roots = [repoRoot, ...repoAliases].map((r) => r.endsWith("/") ? r.slice(0, -1) : r).filter((r) => r.length > 0).sort((a, b) => b.length - a.length);
+  const matchRoot = (abs) => {
+    for (const root of roots) if (abs === root || abs.startsWith(`${root}/`)) return root;
+    return null;
+  };
+  return {
+    /** Is this absolute path (e.g. a session cwd) under the repo or one of its aliases? */
+    isUnderRepo: (abs) => matchRoot(abs) !== null,
+    /** Remap an absolute path to its current repoRoot-relative form, or null if not under the repo. */
+    toRepoRelative: (abs) => {
+      const root = matchRoot(abs);
+      if (root === null) return null;
+      const remapped = `${repoRoot}${abs.slice(root.length)}`;
+      return relative(repoRoot, remapped).replaceAll("\\", "/");
+    },
+    /** Remap an absolute path to its current ABSOLUTE form under repoRoot (for fileExists), or null. */
+    toRepoAbsolute: (abs) => {
+      const root = matchRoot(abs);
+      if (root === null) return null;
+      return `${repoRoot}${abs.slice(root.length)}`;
+    }
+  };
+}
 function buildSpanFromAgent(records, options) {
   const repoRoot = options.repoRoot;
-  const prefix = repoRoot.endsWith("/") ? repoRoot : `${repoRoot}/`;
+  const remapper = makeRepoRemapper(repoRoot, options.repoAliases);
   const agentId = options.agentId;
   let sessionId;
   const cwds = /* @__PURE__ */ new Set();
@@ -4666,7 +4690,6 @@ function buildSpanFromAgent(records, options) {
   const produced = /* @__PURE__ */ new Set();
   let inputTokens = 0;
   let outputTokens = 0;
-  const underRepo = (absPath) => absPath === repoRoot || absPath.startsWith(prefix);
   for (const rec of records) {
     if (rec.sessionId && !sessionId) sessionId = rec.sessionId;
     if (typeof rec.cwd === "string" && rec.cwd.length > 0) cwds.add(rec.cwd);
@@ -4693,17 +4716,17 @@ function buildSpanFromAgent(records, options) {
         outputTokens += usage.output_tokens ?? 0;
       }
       for (const { name, filePath } of toolUses(message.content)) {
-        const abs = resolve(filePath);
-        if (!underRepo(abs)) continue;
-        if (!options.fileExists(abs)) continue;
-        const rel = relative(repoRoot, abs).replaceAll("\\", "/");
+        const absInRepo = remapper.toRepoAbsolute(resolve(filePath));
+        if (absInRepo === null) continue;
+        if (!options.fileExists(absInRepo)) continue;
+        const rel = relative(repoRoot, absInRepo).replaceAll("\\", "/");
         if (AI_TOUCH_TOOLS.has(name)) produced.add(rel);
       }
     }
   }
   let ranInRepo = false;
   for (const c of cwds) {
-    if (c === repoRoot || c.startsWith(prefix)) {
+    if (remapper.isUnderRepo(c)) {
       ranInRepo = true;
       break;
     }
@@ -4855,6 +4878,7 @@ async function collectClaudeCode(params) {
       fileExists,
       now: params.now,
       includeExcerpts: params.includeExcerpts,
+      repoAliases: params.repoAliases,
       agentId
     });
     if (span) {
@@ -4906,7 +4930,7 @@ function messageText(content) {
 }
 function buildSpanFromCodexSession(records, options) {
   const repoRoot = options.repoRoot;
-  const prefix = repoRoot.endsWith("/") ? repoRoot : `${repoRoot}/`;
+  const remapper = makeRepoRemapper(repoRoot, options.repoAliases);
   let cwd;
   let sessionId;
   const modelCounts = /* @__PURE__ */ new Map();
@@ -4940,15 +4964,16 @@ function buildSpanFromCodexSession(records, options) {
         const base = cwd ?? repoRoot;
         for (const rel of patchFiles(p.input)) {
           const abs = isAbsolute(rel) ? rel : resolve2(base, rel);
-          if (abs !== repoRoot && !abs.startsWith(prefix)) continue;
-          if (!options.fileExists(abs)) continue;
-          const r = relative2(repoRoot, abs).replaceAll("\\", "/");
+          const absInRepo = remapper.toRepoAbsolute(abs);
+          if (absInRepo === null) continue;
+          if (!options.fileExists(absInRepo)) continue;
+          const r = relative2(repoRoot, absInRepo).replaceAll("\\", "/");
           if (r && !r.startsWith("..")) produced.add(r);
         }
       }
     }
   }
-  if (!cwd || cwd !== repoRoot && !cwd.startsWith(prefix)) return void 0;
+  if (!cwd || !remapper.isUnderRepo(cwd)) return void 0;
   if (!sessionId) return void 0;
   let model;
   let best = -1;
@@ -5059,7 +5084,8 @@ async function collectCodex(params) {
       repoRoot: params.repoRoot,
       fileExists,
       now: params.now,
-      includeExcerpts: params.includeExcerpts
+      includeExcerpts: params.includeExcerpts,
+      repoAliases: params.repoAliases
     });
     if (span) {
       result.sessionsMatched += 1;
@@ -6449,9 +6475,11 @@ async function collectTraces(cwd, argv, now, stdout) {
     repoRoot = await realpath(repoRoot);
   } catch {
   }
+  const config = await readConfig(cwd);
+  const repoAliases = (config.traces.repoAliases ?? []).map((a) => resolve3(a).replace(/\/+$/, "")).filter((a) => a.length > 0 && a !== repoRoot);
   const nowIso = now();
-  const claudeProbe = await collectClaudeCode({ repoRoot, now: nowIso, includeExcerpts });
-  const codexProbe = await collectCodex({ repoRoot, now: nowIso, includeExcerpts });
+  const claudeProbe = await collectClaudeCode({ repoRoot, now: nowIso, includeExcerpts, repoAliases });
+  const codexProbe = await collectCodex({ repoRoot, now: nowIso, includeExcerpts, repoAliases });
   const probe = {
     spans: [...claudeProbe.spans, ...codexProbe.spans].sort(
       (a, b) => a.startedAt.localeCompare(b.startedAt) || a.spanId.localeCompare(b.spanId)
@@ -6467,6 +6495,9 @@ async function collectTraces(cwd, argv, now, stdout) {
     `  Default output is hashes + file paths + timestamps + model \u2014 never prompt/response text${includeExcerpts ? " (excerpts ENABLED via --include-excerpts)" : ""}.`
   );
   stdout(`  Scope: only sessions whose cwd is this repo (${repoRoot}).`);
+  if (repoAliases.length > 0) {
+    stdout(`  Also counting renamed-repo aliases: ${repoAliases.join(", ")}`);
+  }
   stdout(
     `  Matched ${probe.sessionsMatched} agent run${probe.sessionsMatched === 1 ? "" : "s"} (sessions + subagents) out of ${probe.sessionsScanned} scanned.`
   );
@@ -6672,7 +6703,7 @@ async function snapshotWorkspace(cwd, now, stdout) {
     files,
     packageMetadata
   };
-  ledger.snapshots.push(snapshot);
+  ledger.snapshots = [snapshot];
   await writeLedger(cwd, ledger);
   stdout(`Captured snapshot ${snapshot.snapshotId} with ${files.length} files.`);
 }
@@ -7405,7 +7436,8 @@ async function readConfig(cwd) {
       ignore: unique([...defaults.snapshot.ignore ?? [], ...input.snapshot?.ignore ?? []])
     },
     traces: {
-      include: unique([...defaults.traces.include ?? [], ...input.traces?.include ?? []])
+      include: unique([...defaults.traces.include ?? [], ...input.traces?.include ?? []]),
+      repoAliases: input.traces?.repoAliases ?? defaults.traces.repoAliases
     },
     publish: {
       ...defaults.publish,
