@@ -1,0 +1,34 @@
+{
+  "name": "@vibetrace/cli",
+  "version": "0.1.0",
+  "description": "Local-first proof-of-build ledger for AI-assisted software. `npx @vibetrace/cli` collects your local AI-agent build traces, hashes them, and publishes an inspectable public build story with a build score.",
+  "type": "module",
+  "bin": {
+    "vibetrace": "./vibetrace.mjs"
+  },
+  "files": [
+    "vibetrace.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ethers": "6.13.1"
+  },
+  "optionalDependencies": {
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.6"
+  },
+  "keywords": [
+    "ai",
+    "provenance",
+    "vibe-coding",
+    "0g",
+    "proof-of-build"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

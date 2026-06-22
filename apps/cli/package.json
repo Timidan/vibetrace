@@ -1,0 +1,35 @@
+{
+  "name": "@vibetrace/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "vibetrace": "./dist/vibetrace.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "bundle": "node scripts/bundle.mjs",
+    "pack:publish": "node scripts/bundle.mjs && node -e \"const fs=require('fs');fs.mkdirSync('publish',{recursive:true});fs.copyFileSync('dist/vibetrace.mjs','publish/vibetrace.mjs');fs.chmodSync('publish/vibetrace.mjs',0o755)\"",
+    "vibetrace": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@vibetrace/graph": "workspace:*",
+    "@vibetrace/og": "workspace:*",
+    "@vibetrace/schema": "workspace:*",
+    "@vibetrace/verifier": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "esbuild": "^0.28.1"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@vibetrace/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "serve": "tsx server.ts",
+    "start": "vite build && tsx server.ts"
+  },
+  "dependencies": {
+    "@vibetrace/graph": "workspace:*",
+    "@vibetrace/schema": "workspace:*",
+    "@vibetrace/score": "workspace:*",
+    "@vibetrace/verifier": "workspace:*",
+    "ethers": "6.13.1",
+    "gsap": "^3.13.0",
+    "lenis": "^1.3.11",
+    "vite": "^6.3.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@types/node": "^20.19.0",
+    "tailwindcss": "^4",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "spanId": "span-sample-1",
+    "tool": "codex",
+    "model": "gpt-5",
+    "startedAt": "2026-06-17T10:00:00.000Z",
+    "endedAt": "2026-06-17T10:03:00.000Z",
+    "promptHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "responseHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "promptExcerpt": "This local excerpt should not appear in public bundles.",
+    "filesMentioned": ["packages/schema/src/index.ts"],
+    "artifactsProduced": ["packages/schema/src/index.ts"],
+    "metadata": {
+      "source": "sample"
+    }
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/schema" },
+    { "path": "./packages/graph" },
+    { "path": "./packages/og" },
+    { "path": "./packages/verifier" },
+    { "path": "./packages/score" },
+    { "path": "./apps/cli" },
+    { "path": "./apps/viewer" }
+  ]
+}

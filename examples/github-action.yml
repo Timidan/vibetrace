@@ -1,0 +1,49 @@
+name: VibeTrace
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  vibetrace:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VIBETRACE_REGISTRY_URL: ${{ vars.VIBETRACE_REGISTRY_URL }}
+      VIBETRACE_VIEWER_URL: ${{ vars.VIBETRACE_VIEWER_URL }}
+      VIBETRACE_OG_MODE: ${{ vars.VIBETRACE_OG_MODE }}
+      VIBETRACE_0G_CHAIN_ID: ${{ vars.VIBETRACE_0G_CHAIN_ID }}
+      VIBETRACE_0G_RPC_URL: ${{ vars.VIBETRACE_0G_RPC_URL }}
+      VIBETRACE_0G_STORAGE_INDEXER: ${{ vars.VIBETRACE_0G_STORAGE_INDEXER }}
+      VIBETRACE_0G_STORAGE_FINALITY: ${{ vars.VIBETRACE_0G_STORAGE_FINALITY }}
+      VIBETRACE_0G_PRIVATE_KEY: ${{ secrets.VIBETRACE_0G_PRIVATE_KEY }}
+      # TEE-attested 0G Compute: point at a hosted adjudication relayer that holds
+      # the funded compute key server-side (the CI job never holds it).
+      VIBETRACE_RELAYER_URL: ${{ vars.VIBETRACE_RELAYER_URL }}
+      VIBETRACE_RELAYER_AUTH_TOKEN: ${{ secrets.VIBETRACE_RELAYER_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate VibeTrace public bundle
+        run: pnpm exec vibetrace ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vibetrace-public-bundle
+          path: public/vibetrace.json
+          if-no-files-found: ignore

@@ -1,0 +1,36 @@
+{
+  "name": "vibetrace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev:viewer": "pnpm --filter @vibetrace/viewer dev --host 0.0.0.0",
+    "relayer:build": "pnpm --filter @vibetrace/cli exec node scripts/bundle-relayer.mjs",
+    "relayer": "pnpm relayer:build && node --conditions=require scripts/relayer.bundle.mjs",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^20.19.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@0gfoundation/0g-compute-ts-sdk": "^0.8.4",
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.6",
+    "@noble/hashes": "^1.8.0",
+    "ethers": "6.13.1",
+    "zod": "^3.25.67"
+  }
+}

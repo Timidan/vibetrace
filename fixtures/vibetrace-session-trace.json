@@ -1,0 +1,351 @@
+[
+  {
+    "spanId": "span-vibetrace-01-schema-package",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T05:10:00.000Z",
+    "endedAt": "2026-06-18T05:48:00.000Z",
+    "promptHash": "0x5aad4ddf26b5c16ec3635d483f80ca44e8acba28f17e576f80c8b5cd6fc81452",
+    "responseHash": "0x30e2023fbd9c2c18caa9356cff5c44b1d3d2487f9b832fa6eaa7346a26ed18a5",
+    "filesMentioned": [
+      "packages/schema/src/index.ts",
+      "packages/schema/src/index.test.ts"
+    ],
+    "artifactsProduced": [
+      "packages/schema/src/index.ts",
+      "packages/schema/src/index.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "schema-package",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-02-graph-package",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T05:52:00.000Z",
+    "endedAt": "2026-06-18T06:20:00.000Z",
+    "promptHash": "0x0b6045c1f617e2e9150fbb2e5cf98e71fd48de154fa21d75b2b9f2493cc577d9",
+    "responseHash": "0xbfd179be6b233ce038bfbed912b6f0591532b4d9c614021e10dc2ed7c20c014c",
+    "filesMentioned": [
+      "packages/graph/src/index.ts",
+      "packages/graph/src/index.test.ts"
+    ],
+    "artifactsProduced": [
+      "packages/graph/src/index.ts",
+      "packages/graph/src/index.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "graph-package",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-03-verifier-package",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T06:25:00.000Z",
+    "endedAt": "2026-06-18T06:55:00.000Z",
+    "promptHash": "0x95c530fe53cde3d410c6f691400d16db76cb7350d9e5c8371f82fb4a22d6dbc2",
+    "responseHash": "0x6a89407a91db779b0eab6c500db96c8fbbc9b6046bdb4c74086dc4edb6996ac6",
+    "filesMentioned": [
+      "packages/verifier/src/index.ts",
+      "packages/verifier/src/index.test.ts"
+    ],
+    "artifactsProduced": [
+      "packages/verifier/src/index.ts",
+      "packages/verifier/src/index.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "verifier-package",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-04-og-adapters-package",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T07:00:00.000Z",
+    "endedAt": "2026-06-18T07:30:00.000Z",
+    "promptHash": "0x438dfe5abb94c5423aaa0f6ab241b266e8730ff7183aa4a38d56f2c5bedbcee5",
+    "responseHash": "0x8e43a38a002fd47d9568d8d237caa4c5a9d1507e5fd0a4fd592af59027037123",
+    "filesMentioned": [
+      "packages/og/src/index.ts",
+      "packages/og/src/index.test.ts"
+    ],
+    "artifactsProduced": [
+      "packages/og/src/index.ts",
+      "packages/og/src/index.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "og-adapters-package",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-05-cli-app",
+    "tool": "claude-code",
+    "model": "claude-opus-4-8",
+    "startedAt": "2026-06-18T07:35:00.000Z",
+    "endedAt": "2026-06-18T08:30:00.000Z",
+    "promptHash": "0xa2a6f4ee13fdeedf6f1480a0145976687cbfbf19156eec5fe367ec30dd72bc9d",
+    "responseHash": "0xd27d9d304801f3d0fcdd0d70697f354e4eb1e3834ef093e9ef688aa969135385",
+    "filesMentioned": [
+      "apps/cli/src/index.ts",
+      "apps/cli/src/index.test.ts"
+    ],
+    "artifactsProduced": [
+      "apps/cli/src/index.ts",
+      "apps/cli/src/index.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "cli-app",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-06-score-package",
+    "tool": "claude-code",
+    "model": "claude-opus-4-8",
+    "startedAt": "2026-06-18T09:00:00.000Z",
+    "endedAt": "2026-06-18T11:40:00.000Z",
+    "promptHash": "0x54e4e14075c8a99c9fc7f08af24fe9c211aa202ead89af475a4313b09919a1aa",
+    "responseHash": "0xc00e71a61653456158e8a0c8b70657e3912845bdd62d0fbd0f47556a5a635906",
+    "filesMentioned": [
+      "packages/score/src/index.ts",
+      "packages/score/src/types.ts",
+      "packages/score/src/graph-index.ts",
+      "packages/score/src/coverage.ts",
+      "packages/score/src/integrity.ts",
+      "packages/score/src/trace-quality.ts",
+      "packages/score/src/claim-verify.ts",
+      "packages/score/src/bundle.fixtures.ts",
+      "packages/score/src/types.test.ts",
+      "packages/score/src/graph-index.test.ts",
+      "packages/score/src/coverage.test.ts",
+      "packages/score/src/integrity.test.ts",
+      "packages/score/src/trace-quality.test.ts",
+      "packages/score/src/claim-verify.test.ts",
+      "packages/score/src/score.test.ts",
+      "packages/score/src/smoke.test.ts",
+      "packages/score/src/regression.test.ts",
+      "packages/score/src/bundle.fixtures.test.ts"
+    ],
+    "artifactsProduced": [
+      "packages/score/src/index.ts",
+      "packages/score/src/types.ts",
+      "packages/score/src/graph-index.ts",
+      "packages/score/src/coverage.ts",
+      "packages/score/src/integrity.ts",
+      "packages/score/src/trace-quality.ts",
+      "packages/score/src/claim-verify.ts",
+      "packages/score/src/bundle.fixtures.ts",
+      "packages/score/src/types.test.ts",
+      "packages/score/src/graph-index.test.ts",
+      "packages/score/src/coverage.test.ts",
+      "packages/score/src/integrity.test.ts",
+      "packages/score/src/trace-quality.test.ts",
+      "packages/score/src/claim-verify.test.ts",
+      "packages/score/src/score.test.ts",
+      "packages/score/src/smoke.test.ts",
+      "packages/score/src/regression.test.ts",
+      "packages/score/src/bundle.fixtures.test.ts"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "score-package",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-07-viewer-ui",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T12:00:00.000Z",
+    "endedAt": "2026-06-18T14:10:00.000Z",
+    "promptHash": "0x837d009414f6532fb1a6fd056101e27c5a8c50075145b1ace3f5f86819c0cc30",
+    "responseHash": "0xd691f10887f76f6a6ee56b8e0c1fa7002cfb4bfcf556c25fcd68f82d0b9184ff",
+    "filesMentioned": [
+      "apps/viewer/src/main.ts",
+      "apps/viewer/src/landing.ts",
+      "apps/viewer/src/leaderboard.ts",
+      "apps/viewer/src/viewer.ts",
+      "apps/viewer/src/registry.ts",
+      "apps/viewer/src/styles.css",
+      "apps/viewer/src/viewer.test.ts",
+      "apps/viewer/src/styles.test.ts",
+      "apps/viewer/index.html"
+    ],
+    "artifactsProduced": [
+      "apps/viewer/src/main.ts",
+      "apps/viewer/src/landing.ts",
+      "apps/viewer/src/leaderboard.ts",
+      "apps/viewer/src/viewer.ts",
+      "apps/viewer/src/registry.ts",
+      "apps/viewer/src/styles.css",
+      "apps/viewer/src/viewer.test.ts",
+      "apps/viewer/src/styles.test.ts",
+      "apps/viewer/index.html"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "viewer-ui",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-08-viewer-registry-server",
+    "tool": "claude-code",
+    "model": "claude-opus-4-8",
+    "startedAt": "2026-06-18T14:20:00.000Z",
+    "endedAt": "2026-06-18T16:05:00.000Z",
+    "promptHash": "0xce1c8fdf2315a75497f99ccdcbe09a299d3d87cdca664a3edfb28e1f577d1ed5",
+    "responseHash": "0x2f4fc5caa1d9c4f2fbf39bdd12b282101980e51fe17eade24b6479206688a9be",
+    "filesMentioned": [
+      "apps/viewer/registry-core.ts",
+      "apps/viewer/server.ts",
+      "apps/viewer/vite-registry-plugin.ts",
+      "apps/viewer/vite.config.ts",
+      "apps/viewer/package.json",
+      "apps/viewer/tsconfig.json"
+    ],
+    "artifactsProduced": [
+      "apps/viewer/registry-core.ts",
+      "apps/viewer/server.ts",
+      "apps/viewer/vite-registry-plugin.ts",
+      "apps/viewer/vite.config.ts",
+      "apps/viewer/package.json",
+      "apps/viewer/tsconfig.json"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "viewer-registry-server",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-09-docs-superpowers",
+    "tool": "claude-code",
+    "model": "claude-opus-4-8",
+    "startedAt": "2026-06-18T16:10:00.000Z",
+    "endedAt": "2026-06-18T16:55:00.000Z",
+    "promptHash": "0x0db6086e4c56510a4b0d32b12f25cd79dbbb2f4d0ddbd41680b80385e03e8de2",
+    "responseHash": "0x5f0520c7fb4d72331549b09fae173a82470f07cd2cf774bb8b78cb237eb89719",
+    "filesMentioned": [
+      "docs/superpowers/specs/2026-06-18-vibescore-metric-design.md",
+      "docs/superpowers/specs/2026-06-18-vibetrace-program-design.md",
+      "docs/superpowers/plans/2026-06-18-vibescore-metric.md",
+      "docs/superpowers/research/2026-06-17-vibescore-research.md"
+    ],
+    "artifactsProduced": [
+      "docs/superpowers/specs/2026-06-18-vibescore-metric-design.md",
+      "docs/superpowers/specs/2026-06-18-vibetrace-program-design.md",
+      "docs/superpowers/plans/2026-06-18-vibescore-metric.md",
+      "docs/superpowers/research/2026-06-17-vibescore-research.md"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "docs-superpowers",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-10-docs-integration",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T17:00:00.000Z",
+    "endedAt": "2026-06-18T17:35:00.000Z",
+    "promptHash": "0xb1bca792d5f3df512cbc023ca57c281d05708298e0319deb10548186b78c7b51",
+    "responseHash": "0x578527e2959ca91bc43a0f226c25a37718004dac12fe384115214ea584e67a82",
+    "filesMentioned": [
+      "docs/integration.md",
+      "docs/hackathon-skills.md",
+      "README.md",
+      "examples/vibetrace.config.json",
+      "examples/github-action.yml",
+      "fixtures/sample-trace.json"
+    ],
+    "artifactsProduced": [
+      "docs/integration.md",
+      "docs/hackathon-skills.md",
+      "README.md",
+      "examples/vibetrace.config.json",
+      "examples/github-action.yml",
+      "fixtures/sample-trace.json"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "docs-integration",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  },
+  {
+    "spanId": "span-vibetrace-11-repo-config",
+    "tool": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "startedAt": "2026-06-18T17:40:00.000Z",
+    "endedAt": "2026-06-18T18:05:00.000Z",
+    "promptHash": "0x17cee92d9d57a472606d49ae482abfff205be5fb505a6beca5405b0e53f9db23",
+    "responseHash": "0x9cedb8ecc44c505dab8a411d37d219084f09f6ad1a4ffc15615a6c5b606977ad",
+    "filesMentioned": [
+      "tsconfig.base.json",
+      "tsconfig.json",
+      "vitest.config.ts",
+      "package.json",
+      "pnpm-workspace.yaml",
+      "packages/schema/tsconfig.json",
+      "packages/graph/tsconfig.json",
+      "packages/verifier/tsconfig.json",
+      "packages/og/tsconfig.json",
+      "packages/score/tsconfig.json",
+      "packages/score/package.json",
+      "packages/schema/package.json",
+      "packages/graph/package.json",
+      "packages/verifier/package.json",
+      "packages/og/package.json",
+      "apps/cli/tsconfig.json",
+      "apps/cli/package.json"
+    ],
+    "artifactsProduced": [
+      "tsconfig.base.json",
+      "tsconfig.json",
+      "vitest.config.ts",
+      "package.json",
+      "pnpm-workspace.yaml",
+      "packages/schema/tsconfig.json",
+      "packages/graph/tsconfig.json",
+      "packages/verifier/tsconfig.json",
+      "packages/og/tsconfig.json",
+      "packages/score/tsconfig.json",
+      "packages/score/package.json",
+      "packages/schema/package.json",
+      "packages/graph/package.json",
+      "packages/verifier/package.json",
+      "packages/og/package.json",
+      "apps/cli/tsconfig.json",
+      "apps/cli/package.json"
+    ],
+    "metadata": {
+      "session": "vibetrace-build",
+      "group": "repo-config",
+      "attribution": "file-level-real",
+      "hashDerivation": "sha256-of-produced-file-contents"
+    }
+  }
+]

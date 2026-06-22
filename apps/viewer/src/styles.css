@@ -1,0 +1,404 @@
+/* ── Fonts (must precede the tailwindcss import per CSS @import ordering) ── */
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+@import "tailwindcss";
+
+/* ── Neo-Brutal theme (ported from design-samples/v2/brutal.html) ── */
+@theme {
+  --font-display: "Archivo Black", system-ui, sans-serif;
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-ink: #0b0b0f;
+  --color-paper: #fbf7ec;
+  --color-blue: #1d4ed8;
+  --color-coral: #fb4d26;
+  --color-lime: #c6f135;
+  --color-violet: #6d28d9;
+  --color-sun: #ffc400;
+  --color-wax: #b3122b;
+  --color-paperlight: #f5f0e6;
+  --color-cyan: #06b6d4;
+}
+
+:root {
+  --shadow: 6px 6px 0 #0b0b0f;
+  --shadow-lg: 10px 10px 0 #0b0b0f;
+  --shadow-xl: 14px 14px 0 #0b0b0f;
+  /* Single source of truth for the ledger grid size. The body grid below AND the
+     model-marks engine (src/model-marks.ts) both read this — change it in one place. */
+  --vt-grid: 48px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: #fbf7ec;
+  color: #0b0b0f;
+  background-image:
+    radial-gradient(circle at 6% 4%, rgba(29, 78, 216, 0.22), transparent 34%),
+    radial-gradient(circle at 96% 2%, rgba(251, 77, 38, 0.2), transparent 32%),
+    radial-gradient(circle at 92% 96%, rgba(109, 40, 217, 0.22), transparent 40%),
+    radial-gradient(circle at 4% 92%, rgba(198, 241, 53, 0.3), transparent 36%),
+    linear-gradient(#0b0b0f0f 2px, transparent 2px),
+    linear-gradient(90deg, #0b0b0f0f 2px, transparent 2px);
+  background-size: auto, auto, auto, auto, var(--vt-grid) var(--vt-grid), var(--vt-grid) var(--vt-grid);
+  background-attachment: fixed;
+}
+
+/* ── Model marks — ambient "the ledger remembers the hands" background ──
+ * A fixed layer over the body grid, under all content. On pointer movement a
+ * faint official agent/model logo develops at a random 28px cell, holds with a
+ * "thinking" shimmer, then fades. Engine: src/model-marks.ts. The grid is the
+ * quiet substrate; this never competes with the page's real hero (the proof). */
+#vt-model-marks {
+  position: fixed;
+  inset: 0;
+  z-index: -1; /* paints over the body grid, beneath every in-flow surface */
+  pointer-events: none;
+  overflow: hidden;
+}
+.vt-mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  animation: vtMarkIn 1.9s linear forwards; /* per-keyframe easing below */
+  will-change: opacity, transform;
+}
+.vt-mark svg {
+  display: block;
+}
+.vt-mark-spark {
+  animation: vtMarkShimmer 1.15s ease-in-out infinite;
+}
+@keyframes vtMarkIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.86);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* snap in — no perceived delay */
+  }
+  5% {
+    opacity: var(--peak, 0.2);
+    transform: translate(-50%, -50%) scale(1);
+    animation-timing-function: linear; /* flat hold */
+  }
+  66% {
+    opacity: var(--peak, 0.2);
+    transform: translate(-50%, -50%) scale(1);
+    animation-timing-function: ease-in; /* gentle fade-out */
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+@keyframes vtMarkShimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #vt-model-marks {
+    display: none;
+  }
+}
+
+/* ── Border + hard-shadow utilities ── */
+@utility b2 {
+  border: 2px solid #0b0b0f;
+}
+@utility b3 {
+  border: 3px solid #0b0b0f;
+}
+@utility b4 {
+  border: 4px solid #0b0b0f;
+}
+@utility hard {
+  box-shadow: var(--shadow);
+}
+@utility hard-lg {
+  box-shadow: var(--shadow-lg);
+}
+@utility hard-xl {
+  box-shadow: var(--shadow-xl);
+}
+@utility hard-c {
+  box-shadow: 5px 5px 0 #c6f135, 10px 10px 0 #0b0b0f;
+}
+@utility hard-coral {
+  box-shadow: 5px 5px 0 #fb4d26, 10px 10px 0 #0b0b0f;
+}
+@utility hard-blue {
+  box-shadow: 5px 5px 0 #1d4ed8, 10px 10px 0 #0b0b0f;
+}
+@utility hard-violet {
+  box-shadow: 5px 5px 0 #6d28d9, 10px 10px 0 #0b0b0f;
+}
+
+/* ── Hover lifts ── */
+@utility lift {
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.16s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.lift:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 9px 9px 0 #0b0b0f;
+}
+@utility lift-lg {
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.lift-lg:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: var(--shadow-xl);
+}
+
+.tag {
+  font-feature-settings: "tnum";
+}
+
+/* ── Keyframes ── */
+@keyframes stampIn {
+  0% {
+    transform: scale(2.4) rotate(-14deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.92) rotate(-7deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-5deg);
+    opacity: 1;
+  }
+}
+.stamp {
+  animation: stampIn 0.7s cubic-bezier(0.2, 1.1, 0.3, 1) 0.15s both;
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin-slow {
+  animation: spinSlow 26s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 22s linear infinite;
+}
+
+/* Hero seal is a STATIC stamp now — no spin, no float. Its only motion is the
+   one-shot entrance reveal in the GSAP hero timeline (gated by reduced motion). */
+
+/* ── Reduced-motion safety ── */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .stamp,
+  .marquee-track,
+  .spin-slow {
+    animation: none !important;
+  }
+  .lift,
+  .lift-lg {
+    transition: none !important;
+  }
+  .stamp {
+    transform: rotate(-5deg);
+    opacity: 1;
+  }
+  /* Live marquee: hide the (now static) scrolling track, show the recent list. */
+  .marquee-track[data-marquee-track] {
+    display: none;
+  }
+  .marquee-static {
+    display: block;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ── App shell: sticky footer (footer flush to viewport bottom on short pages) ── */
+#app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 0G glitch / VHS inline mark ── */
+.og0g {
+  display: inline-block;
+  height: 1.3em;
+  width: auto;
+  position: relative;
+  vertical-align: -0.32em;
+  margin: 0 0.14em;
+  color: #9200e1;
+  filter: drop-shadow(2px 2px 0 rgba(11, 11, 15, 0.2));
+}
+.og0g svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+}
+.og0g-r,
+.og0g-c {
+  will-change: transform;
+}
+.og0g-r {
+  animation: og0gShiftR 2.1s steps(2, end) infinite;
+}
+.og0g-c {
+  animation: og0gShiftC 2.1s steps(2, end) infinite;
+}
+.og0g-layers {
+  animation: og0gSlice 5s steps(1, end) infinite;
+}
+.og0g::after {
+  content: "";
+  position: absolute;
+  inset: -2px -1px;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(11, 11, 15, 0.22) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+  animation: og0gScan 5.5s linear infinite;
+}
+@keyframes og0gShiftR {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1.6px, -1px); }
+  50% { transform: translate(-1.2px, 0.6px); }
+  75% { transform: translate(0.8px, 0.4px); }
+}
+@keyframes og0gShiftC {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-1.6px, 1px); }
+  50% { transform: translate(1.2px, -0.6px); }
+  75% { transform: translate(-0.8px, -0.4px); }
+}
+@keyframes og0gSlice {
+  0%, 88%, 100% { clip-path: inset(0); transform: translateX(0); }
+  90% { clip-path: inset(38% 0 34% 0); transform: translateX(2px); }
+  93% { clip-path: inset(8% 0 66% 0); transform: translateX(-2px); }
+  96% { clip-path: inset(62% 0 6% 0); transform: translateX(1px); }
+}
+@keyframes og0gScan {
+  to { background-position: 0 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .og0g-r,
+  .og0g-c {
+    opacity: 0;
+  }
+  .og0g-layers,
+  .og0g::after {
+    animation: none !important;
+  }
+  .og0g::after {
+    opacity: 0.25;
+  }
+}
+
+/* ── Receipts card: the ONE hero animation — the seal press ──
+ * Fires exactly once when the attested verdict returns: scale 1.18→1.0 with a
+ * 6px→2px hard-shadow snap and a brief ink impact-darken. 380ms, locked easing.
+ * main.ts adds .seal-press to [data-seal-press] once; reduced motion skips it
+ * (the seal is authored in its final pressed frame in markup). */
+@keyframes sealPress {
+  0% {
+    transform: scale(1.18);
+    box-shadow: 6px 6px 0 #0b0b0f;
+    filter: brightness(1);
+  }
+  55% {
+    filter: brightness(0.86);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 2px 2px 0 #0b0b0f;
+    filter: brightness(1);
+  }
+}
+.seal-press {
+  animation: sealPress 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seal-press {
+    animation: none !important;
+  }
+}
+
+/* ── 0G TEE-execution treatment ──
+ * Reserved for bundles that were independently EXAMINED by an attested 0G TEE
+ * enclave (execution attested by the provider's 0G TEE signer named by the
+ * attestation; verdict relayed by the operator, NOT attested by the enclave).
+ * Token-driven, no
+ * new colors: wax rim + ink text on paper-light, the neo-brutal hard shadow,
+ * and the ◆ diamond seal-mark (NOT a generic checkmark) carried in the copy. */
+.tee-band {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: 3px solid var(--color-ink);
+  border-left: 8px solid var(--color-wax);
+  background-color: var(--color-paperlight);
+  color: var(--color-ink);
+  box-shadow: var(--shadow);
+  padding: 0.6rem 0.9rem;
+}
+.tee-band .tee-mark {
+  color: var(--color-wax);
+  font-weight: 700;
+  line-height: 1;
+}
+.tee-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 2px solid var(--color-ink);
+  background-color: var(--color-wax);
+  color: var(--color-paperlight);
+  box-shadow: var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  padding: 0.1rem 0.5rem;
+}
+.examiner-card {
+  border: 3px solid var(--color-ink);
+  border-left: 8px solid var(--color-wax);
+  background-color: var(--color-paperlight);
+  color: var(--color-ink);
+  box-shadow: var(--shadow);
+  padding: 0.75rem 0.9rem;
+}
+.examiner-card .tee-mark {
+  color: var(--color-wax);
+  font-weight: 700;
+}

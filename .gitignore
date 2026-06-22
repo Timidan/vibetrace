@@ -1,0 +1,41 @@
+node_modules/
+dist/
+coverage/
+.vibetrace/
+.DS_Store
+*.tsbuildinfo
+
+# Secrets — never commit any real env (templates *.example stay tracked)
+.env
+.env.*
+!.env.*.example
+scripts/.env.*
+!scripts/.env.*.example
+/tmp/vt-tee/
+*.log
+
+# Generated relayer launch bundle (built by `pnpm relayer`)
+scripts/relayer.bundle.mjs
+
+# Registry store + packaging artifacts (runtime / local state)
+apps/viewer/.vibetrace-registry.json
+*.tgz
+
+# Internal build-process docs (plans, specs, research, progress) — kept local, not shipped
+docs/superpowers/
+docs/hackathon-skills.md
+
+# Agent / assistant instruction files — kept local, untracked
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+
+# Editor / tool caches + test-runner + generated export artifacts (runtime, regenerated)
+.impeccable/
+.vscode/
+test-results/
+public/vibetrace.json
+
+# Local design exploration scratch — kept local, not shipped
+design-samples/

@@ -1,0 +1,27 @@
+{
+  "name": "@vibetrace/score",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vibetrace/schema": "workspace:*",
+    "ethers": "6.13.1"
+  },
+  "devDependencies": {
+    "@vibetrace/graph": "workspace:*",
+    "@vibetrace/verifier": "workspace:*"
+  }
+}

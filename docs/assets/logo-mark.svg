@@ -1,0 +1,9 @@
+<svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="VibeTrace" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
+  <!-- VibeTrace mark: an attestation seal whose interior is a "vibe pulse" — the
+       traced AI build signal — terminating in an anchored (attested) node.
+       Lime/cream/ink palette; reads on light and dark backgrounds. -->
+  <circle cx="32" cy="32" r="26" fill="#F2EDE3" stroke="#0B0B0F" stroke-width="4"/>
+  <circle cx="32" cy="32" r="17.5" fill="#C6F135" stroke="#0B0B0F" stroke-width="3"/>
+  <path d="M20 32 H26 L29 24 L35 41 L38 32 H44" fill="none" stroke="#0B0B0F" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="44" cy="32" r="2.9" fill="#0B0B0F"/>
+</svg>

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "vibetrace.config.v1",
+  "project": {
+    "name": "my-project"
+  },
+  "privacy": {
+    "redaction": "private-by-default"
+  },
+  "snapshot": {
+    "ignore": [
+      ".git/**",
+      ".vibetrace/**",
+      "node_modules/**",
+      "dist/**",
+      ".next/**",
+      "coverage/**",
+      "playwright-report/**",
+      "test-results/**",
+      ".env*",
+      "*.log"
+    ]
+  },
+  "traces": {
+    "include": [
+      ".agenttrace/*.json",
+      ".agenttrace/**/*.json",
+      ".vibetrace/inbox/*.json",
+      ".vibetrace/inbox/**/*.json",
+      "agenttrace/*.json",
+      "agenttrace/**/*.json",
+      "ai-traces/*.json",
+      "ai-traces/**/*.json",
+      "trace.json",
+      "traces/*.json",
+      "traces/**/*.json",
+      "vibetrace.trace.json"
+    ]
+  },
+  "publish": {
+    "publicBundlePath": "public/vibetrace.json"
+  }
+}
