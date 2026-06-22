@@ -57,7 +57,7 @@ function renderHero(): string {
             <span class="bg-ink text-lime px-1 font-bold">two honest signals</span>: a
             <span class="font-bold text-ink">Build Score</span> for how AI-built it is, and
             <span class="font-bold text-ink">Proof</span> for how independently that's been examined. The default
-            <span class="font-mono text-ink">npx vibetrace</span> run writes a local dev anchor; in opt-in real mode it
+            <span class="font-mono text-ink">npx vibetrace-cli</span> run writes a local dev anchor; in opt-in real mode it
             anchors the fingerprint to ${og0gGlitch()}. It never fakes a check it didn't run. Change one byte and it
             stops matching — so nobody has to take your word for it.
           </p>
@@ -113,14 +113,14 @@ function renderHowItWorks(): string {
     {
       num: "④",
       title: "Anchor",
-      body: "Opt into real mode and the bundle fingerprint goes on 0G; by default npx vibetrace writes a local dev anchor instead. Either way, tamper with anything afterward and the hash no longer lines up. Anyone can run that check.",
+      body: "Opt into real mode and the bundle fingerprint goes on 0G; by default npx vibetrace-cli writes a local dev anchor instead. Either way, tamper with anything afterward and the hash no longer lines up. Anyone can run that check.",
       bg: "bg-sun text-ink",
       numBg: "bg-ink text-lime"
     },
     {
       num: "⑤",
       title: "Score & publish",
-      body: "You get a Build Score + Proof status, a public build-story page, and an SVG badge you can drop in a README. One npx vibetrace run lands you on the leaderboard.",
+      body: "You get a Build Score + Proof status, a public build-story page, and an SVG badge you can drop in a README. One npx vibetrace-cli run lands you on the leaderboard.",
       bg: "bg-ink text-paper",
       numBg: "bg-lime text-ink"
     }
@@ -262,7 +262,7 @@ function renderProofInTheWild(entries: RegistrySummary[]): string {
           </div>
           <div class="min-w-0">
             <div class="font-display text-base sm:text-lg tracking-tight leading-none">Be the next.</div>
-            <span class="font-mono text-[11px] font-bold text-ink/50">Run npx vibetrace and grab a rank →</span>
+            <span class="font-mono text-[11px] font-bold text-ink/50">Run npx vibetrace-cli and grab a rank →</span>
           </div>
         </div>
       </a>`
@@ -297,15 +297,15 @@ function renderProofInTheWild(entries: RegistrySummary[]): string {
 
 /* ── Integrate CTA — one command ──
  *
- * Leads with the single `npx vibetrace` command (collect → publish → on the
+ * Leads with the single `npx vibetrace-cli` command (collect → publish → on the
  * board). The multi-step CLI (install/init/publish) is de-emphasized to a small
  * honest footnote underneath. Builds are ingested ONLY from the CLI — there is
  * no manual "submit a URL" path.
  */
 
 function renderIntegrate(): string {
-  const oneCmd = escapeHtml("npx vibetrace");
-  const multiStep = escapeHtml("pnpm add -D @vibetrace/cli  →  vibetrace init  →  vibetrace publish");
+  const oneCmd = escapeHtml("npx vibetrace-cli");
+  const multiStep = escapeHtml("npm i -g vibetrace-cli  →  vibetrace init  →  vibetrace publish");
   const badgeSnippet = escapeHtml(
     "[![VibeScore](<your-vibetrace-host>/api/badge/<id>.svg)](<your-vibetrace-host>/#/p/<id>)"
   );
@@ -316,7 +316,7 @@ function renderIntegrate(): string {
         <div class="inline-block b3 bg-lime text-ink px-3 py-1.5 hard font-mono text-[11px] font-bold uppercase tracking-widest mb-4 -rotate-1">Add to your project</div>
         <h2 id="integrate-h" class="font-display text-3xl sm:text-5xl tracking-tight leading-[0.95] mb-3" style="text-shadow:3px 3px 0 #0B0B0F">Get on the board in one command.</h2>
         <p class="font-mono text-sm text-white/70 max-w-2xl mb-6">
-          Run it in your repo. <code class="bg-ink text-lime px-1.5 font-bold">npx vibetrace</code> reads your actual AI
+          Run it in your repo. <code class="bg-ink text-lime px-1.5 font-bold">npx vibetrace-cli</code> reads your actual AI
           build trace, publishes it, and signs you up on the leaderboard. No forms. No URL to paste.
         </p>
 

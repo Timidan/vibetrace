@@ -670,7 +670,7 @@ function renderSignatureNote(): string {
  * A single muted publisher-REPORTED chip for one verify leg. The `~` marker keeps the
  * HONESTY framing: this is a CLAIM the publisher recorded at publish, NEVER trustless
  * green. A reported MISMATCH renders wax (an honest publisher admission). The trustless
- * re-run is the live Fetch button (storage) / `npx vibetrace verify` (all legs).
+ * re-run is the live Fetch button (storage) / `npx vibetrace-cli verify` (all legs).
  */
 function reportedChip(matches: boolean): string {
   return matches
@@ -855,7 +855,7 @@ function renderReceiptsDrawer(
       : "";
   const verifyCta = `
         <p class="font-mono text-[11px] text-ink/55 leading-relaxed">
-          re-verify live <code class="bg-ink text-lime px-1 font-bold">npx vibetrace verify &lt;bundle.json&gt;</code>${recoverNote}
+          re-verify live <code class="bg-ink text-lime px-1 font-bold">npx vibetrace-cli verify &lt;bundle.json&gt;</code>${recoverNote}
         </p>`;
 
   const verifier = bundle.verifierSummary as VerifierRun;

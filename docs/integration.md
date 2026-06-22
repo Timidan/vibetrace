@@ -9,7 +9,7 @@ a local private ledger, and exports an explicit public bundle only when asked.
 Install the CLI in the project you want to trace:
 
 ```bash
-pnpm add -D @vibetrace/cli
+pnpm add -D vibetrace-cli
 ```
 
 During local monorepo development, use `pnpm --filter @vibetrace/cli vibetrace`

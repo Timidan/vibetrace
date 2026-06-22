@@ -38,7 +38,7 @@ function renderGhostRow(rank: number): string {
   return `
     <div class="b3 border-dashed border-ink/30 bg-paper/40 p-4 sm:p-5 flex items-center gap-3 sm:gap-5" aria-hidden="true">
       <div class="b2 border-dashed border-ink/40 text-ink/40 w-12 h-12 sm:w-14 sm:h-14 grid place-items-center shrink-0 font-display text-xl sm:text-2xl">${rank}</div>
-      <div class="font-mono text-xs sm:text-sm text-ink/45">Open rank — run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace</code> in your repo to claim it.</div>
+      <div class="font-mono text-xs sm:text-sm text-ink/45">Open rank — run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace-cli</code> in your repo to claim it.</div>
     </div>`;
 }
 
@@ -130,7 +130,7 @@ function renderHeader(count: number): string {
     count === 0
       ? "open ledger · be the first"
       : count === 1
-        ? "1 project so far · run npx vibetrace"
+        ? "1 project so far · run npx vibetrace-cli"
         : `${escapeHtml(String(count))} projects ranked · live`;
 
   return `
@@ -150,12 +150,12 @@ function renderHeader(count: number): string {
 /* ── Get on the board callout ──
  *
  * There is NO manual submission form: builds are ingested ONLY from the CLI.
- * This callout shows the single `npx vibetrace` command with a Copy button.
+ * This callout shows the single `npx vibetrace-cli` command with a Copy button.
  * The Copy button reuses the [data-copy-badge] hook pattern from the story
  * page, so main.ts can bind it with the same bindCopyBadge() handler.
  */
 
-const VIBETRACE_CMD = "npx vibetrace";
+const VIBETRACE_CMD = "npx vibetrace-cli";
 
 function renderGetOnBoard(): string {
   const cmd = escapeHtml(VIBETRACE_CMD);
@@ -180,7 +180,7 @@ function renderGetOnBoard(): string {
         </div>
 
         <p class="font-mono text-[11px] sm:text-xs text-white/70 mt-3 max-w-2xl">
-          No forms. Run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace</code> in your repo; it reads your actual AI build trace and signs it up right here.
+          No forms. Run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace-cli</code> in your repo; it reads your actual AI build trace and signs it up right here.
         </p>
       </div>
     </section>`;
@@ -192,7 +192,7 @@ function renderEmptyBoard(): string {
   return `
     <section aria-label="No submissions yet" class="b4 border-dashed bg-paper hard-lg p-8 text-center">
       <div class="font-display text-2xl sm:text-3xl tracking-tight mb-2">No builds on the board yet.</div>
-      <p class="font-mono text-sm text-ink/60 max-w-md mx-auto">Board's empty. Run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace</code> in your repo and take rank one.</p>
+      <p class="font-mono text-sm text-ink/60 max-w-md mx-auto">Board's empty. Run <code class="bg-ink text-lime px-1 font-bold">npx vibetrace-cli</code> in your repo and take rank one.</p>
     </section>`;
 }
 

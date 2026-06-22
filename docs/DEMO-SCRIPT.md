@@ -55,7 +55,7 @@ Run the whole flow live on a small repo (lowest-risk path: local fallback, no ke
 
 ```bash
 cd /path/to/a/small/repo-you-built-with-an-agent
-npx @vibetrace/cli
+npx vibetrace-cli
 ```
 
 Narrate while it runs — it does five things in one shot:
@@ -86,7 +86,7 @@ appear — the registry seeds at boot.)
 This is the line that separates VibeTrace from a screenshot.
 
 ```bash
-npx vibetrace verify .vibetrace/public/<bundle>.json
+npx vibetrace-cli verify .vibetrace/public/<bundle>.json
 ```
 
 Use the pre-anchored seeded bundle here so all three legs are live. It
@@ -107,7 +107,7 @@ storage matches · chain matches · SIGNER MATCHES
 
 - **A flagship dev-tool that exercises all three 0G pillars** end-to-end —
   Storage, Chain, and Compute/TEE — for their real purpose, not as a checkbox.
-- **An onboarding funnel.** Every builder who runs `npx @vibetrace/cli` writes to
+- **An onboarding funnel.** Every builder who runs `npx vibetrace-cli` writes to
   0G on their first run, with **no wallet and no gas** (the hosted relayer funds
   the writes). Lowest-friction "your first 0G transaction" in the ecosystem.
 - **A real use case for 0G Compute/TeeML:** a neutral, attested adjudicator —

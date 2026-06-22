@@ -631,16 +631,16 @@ describe("renderLeaderboard (RegistrySummary[])", () => {
     expect(html).not.toContain('type="url"');
   });
 
-  it("renders the 'Get on the board' npx vibetrace callout with a copy button", () => {
+  it("renders the 'Get on the board' npx vibetrace-cli callout with a copy button", () => {
     const base = summarize(loadSeedBundles()[0], "2026-06-17T16:08:00.000Z");
     const html = renderLeaderboard([base]);
     expect(html).toContain("Get on the board");
-    expect(html).toContain("npx vibetrace");
+    expect(html).toContain("npx vibetrace-cli");
     // honest one-liner: no forms.
     expect(html).toMatch(/no forms/i);
     // reuses the [data-copy-badge] copy-button pattern, carrying the command.
     expect(html).toContain("data-copy-badge");
-    expect(html).toContain('data-copy-text="npx vibetrace"');
+    expect(html).toContain('data-copy-text="npx vibetrace-cli"');
     expect(html).toContain("data-copy-label");
   });
 
@@ -648,7 +648,7 @@ describe("renderLeaderboard (RegistrySummary[])", () => {
     const empty = renderLeaderboard([]);
     // The CLI callout is always available; the board invites the first build.
     expect(empty).toContain("Get on the board");
-    expect(empty).toContain("npx vibetrace");
+    expect(empty).toContain("npx vibetrace-cli");
     expect(empty).toContain("be the first");
     expect(empty).not.toContain("data-submit-form");
     expect(empty).not.toMatch(/undefined|NaN/);
@@ -731,13 +731,13 @@ describe("renderLanding — the product landing (narrative, distinct page)", () 
     expect(none).not.toMatch(/undefined|NaN/);
   });
 
-  it("leads the integrate CTA with the single npx vibetrace command", () => {
+  it("leads the integrate CTA with the single npx vibetrace-cli command", () => {
     const html = renderLanding(entries);
     expect(html).toContain('id="integrate"');
-    // The hero command is `npx vibetrace`.
-    expect(html).toContain("npx vibetrace");
+    // The hero command is `npx vibetrace-cli`.
+    expect(html).toContain("npx vibetrace-cli");
     // The multi-step CLI is still mentioned, but de-emphasized (footnote).
-    expect(html).toContain("pnpm add -D @vibetrace/cli");
+    expect(html).toContain("npm i -g vibetrace-cli");
     expect(html).toContain("vibetrace init");
     expect(html).toContain("vibetrace publish");
     // No manual "submit a URL" path remains on the landing.
@@ -1716,7 +1716,7 @@ describe("registry-core handlers", () => {
     await expect(readLimitedRequestBody(chunks(), 64 * 1024)).rejects.toThrow(/too large/i);
   });
 
-  it("handleSubmit accepts a directly POSTed { bundle } — scores, stores, and returns the entry (the npx vibetrace path)", async () => {
+  it("handleSubmit accepts a directly POSTed { bundle } — scores, stores, and returns the entry (the npx vibetrace-cli path)", async () => {
     const { store, dir } = await freshTempStore();
     try {
       const before = store.entries.length;
