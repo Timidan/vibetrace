@@ -6583,6 +6583,15 @@ async function shipFlow(cwd, argv, now, env, stdout, promptYesNo = defaultPrompt
     stdout("Could not read the published public bundle; skipping registry registration.");
     return;
   }
+  const traceSpanCount = bundle.publicGraph?.nodes?.filter(
+    (n) => n.type === "TraceSpan"
+  ).length ?? 0;
+  if (traceSpanCount === 0) {
+    stdout(
+      "No AI build traces captured for this path \u2014 not registering to the board (the local ledger is still here). Run vibetrace in a repo where you used Claude Code or Codex."
+    );
+    return;
+  }
   try {
     const gzipped = gzipSync(Buffer.from(JSON.stringify({ bundle }), "utf8"));
     const response = await fetch(`${registryUrl}/api/submit`, {

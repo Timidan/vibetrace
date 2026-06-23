@@ -1829,6 +1829,25 @@ describe("registry-core handlers", () => {
     }
   });
 
+  it("handleSubmit rejects a zero-evidence bundle (no TraceSpan nodes) — proof-of-AI-build board", async () => {
+    const { store, dir } = await freshTempStore();
+    try {
+      const before = store.entries.length;
+      const bundle = anchoredBundle();
+      // strip every TraceSpan node — a snapshot-only / no-AI-trace bundle has nothing to prove
+      bundle.publicGraph = {
+        ...bundle.publicGraph,
+        nodes: bundle.publicGraph.nodes.filter((n) => n.type !== "TraceSpan")
+      };
+      const res = await handleSubmit(store, JSON.stringify({ bundle }));
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body).error).toMatch(/no ai build traces/i);
+      expect(store.entries.length).toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("handleSubmit rejects posted bundles with malformed hash fields", async () => {
     const { store, dir } = await freshTempStore();
     try {

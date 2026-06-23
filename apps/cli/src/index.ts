@@ -502,6 +502,21 @@ async function shipFlow(
     return;
   }
 
+  // Don't put a zero-evidence build on a proof-of-AI-build leaderboard. If no agent trace spans were
+  // captured for this path (e.g. run outside a repo, or no Claude Code / Codex history here), the bundle
+  // has nothing to prove. The local ledger is still written — we just skip the public board.
+  const traceSpanCount =
+    (bundle as { publicGraph?: { nodes?: Array<{ type?: string }> } }).publicGraph?.nodes?.filter(
+      (n) => n.type === "TraceSpan"
+    ).length ?? 0;
+  if (traceSpanCount === 0) {
+    stdout(
+      "No AI build traces captured for this path — not registering to the board (the local ledger is still here). " +
+        "Run vibetrace in a repo where you used Claude Code or Codex."
+    );
+    return;
+  }
+
   try {
     // Public bundles are hashes + paths — highly compressible. gzip the body so even a large repo's
     // bundle stays a few MB on the wire (the board enforces a small wire cap + a bounded inflate cap).

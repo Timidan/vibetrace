@@ -466,6 +466,11 @@ function validatePostedBundle(store: RegistryStore, bundle: PublicLedgerBundle):
   if (bundle.evidenceBadges.length > maxBundleArrayItems) {
     return `Too many evidenceBadges entries (max ${maxBundleArrayItems})`;
   }
+  // The leaderboard is proof-of-AI-build: a bundle with no captured agent trace spans has no build
+  // evidence to rank, so reject it regardless of client version (keeps zero-evidence runs off the board).
+  if (!bundle.publicGraph.nodes.some((n) => n.type === "TraceSpan")) {
+    return "No AI build traces in this bundle — nothing to register.";
+  }
 
   const hashErrors = collectHashValidationErrors(bundle);
   return hashErrors[0] ?? null;
